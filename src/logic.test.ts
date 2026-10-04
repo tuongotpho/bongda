@@ -1,0 +1,133 @@
+import { describe, expect, it } from 'vitest'
+import { buildObligations, debtors, fundSummary, matchOutcome, reminderMessage, splitTeams, waterCharges } from './logic'
+import { DEFAULT_SETTINGS, type AppData, type Match, type Member } from './types'
+
+const mem = (id: string, skill = 3, isGK = false): Member => ({ id, name: id.toUpperCase(), skill, isGK, active: true, monthlyFee: 100000, createdAt: 0 })
+
+const match = (over: Partial<Match> = {}): Match => ({
+  id: 'm1',
+  date: '2026-10-04',
+  teamA: ['a', 'b'],
+  teamB: ['c', 'd'],
+  scoreA: 3,
+  scoreB: 1,
+  waterFee: 20000,
+  drawRule: 'half',
+  createdAt: 0,
+  ...over,
+})
+
+const data = (over: Partial<AppData> = {}): AppData => ({
+  members: ['a', 'b', 'c', 'd'].map((id) => mem(id)),
+  matches: [],
+  months: [],
+  payments: [],
+  expenses: [],
+  incomes: [],
+  settings: DEFAULT_SETTINGS,
+  ...over,
+})
+
+// RNG cố định để test lặp lại được
+const seeded = (seed: number) => () => {
+  seed = (seed * 1664525 + 1013904223) % 4294967296
+  return seed / 4294967296
+}
+
+describe('splitTeams', () => {
+  it('chia đủ người, chênh nhau tối đa 1, không trùng', () => {
+    const players = Array.from({ length: 11 }, (_, i) => mem('p' + i, (i % 5) + 1))
+    const r = splitTeams(players, seeded(1))
+    expect(r.teamA.length + r.teamB.length).toBe(11)
+    expect(Math.abs(r.teamA.length - r.teamB.length)).toBeLessThanOrEqual(1)
+    expect(new Set([...r.teamA, ...r.teamB]).size).toBe(11)
+  })
+
+  it('cân bằng trình độ và rải đều thủ môn', () => {
+    const players = [mem('s1', 5), mem('s2', 5), mem('w1', 1), mem('w2', 1), mem('g1', 3, true), mem('g2', 3, true)]
+    const r = splitTeams(players, seeded(7))
+    expect(r.skillA).toBe(r.skillB)
+    const gkA = r.teamA.filter((id) => id.startsWith('g')).length
+    expect(gkA).toBe(1)
+  })
+})
+
+describe('tiền nước', () => {
+  it('đội thua mỗi người trả đủ tiền nước', () => {
+    expect(waterCharges(match())).toEqual([
+      { memberId: 'c', amount: 20000 },
+      { memberId: 'd', amount: 20000 },
+    ])
+    expect(waterCharges(match({ scoreA: 0, scoreB: 2 })).map((c) => c.memberId)).toEqual(['a', 'b'])
+  })
+
+  it('hòa theo luật: chia đôi (làm tròn 1.000đ) / cả hai trả / miễn', () => {
+    const draw = { scoreA: 1, scoreB: 1 }
+    expect(waterCharges(match({ ...draw, waterFee: 15000 }))).toHaveLength(4)
+    expect(waterCharges(match({ ...draw, waterFee: 15000 }))[0].amount).toBe(8000)
+    expect(waterCharges(match({ ...draw, drawRule: 'full' }))[0].amount).toBe(20000)
+    expect(waterCharges(match({ ...draw, drawRule: 'none' }))).toEqual([])
+  })
+
+  it('trận nhập từ sổ cũ dùng danh sách phạt có sẵn, không cần tỉ số', () => {
+    const charges = [{ memberId: 'a', amount: 10000 }]
+    expect(waterCharges(match({ scoreA: null, scoreB: null, teamA: [], teamB: [], charges }))).toEqual(charges)
+  })
+
+  it('trận chưa nhập tỉ số thì chưa ai nợ', () => {
+    expect(matchOutcome(match({ scoreA: null }))).toBe('pending')
+    expect(waterCharges(match({ scoreB: null }))).toEqual([])
+  })
+})
+
+describe('nghĩa vụ và người nợ', () => {
+  const d = data({
+    matches: [match()],
+    months: [{ id: '2026-10', amounts: { a: 100000, b: 100000, c: 100000, d: 100000 }, createdAt: 0 }],
+    payments: [
+      { id: 'water_m1_c', memberId: 'c', kind: 'water', refId: 'm1', amount: 20000, paidAt: 1 },
+      { id: 'monthly_2026-10_a', memberId: 'a', kind: 'monthly', refId: '2026-10', amount: 100000, paidAt: 1 },
+    ],
+    expenses: [
+      { id: 'e1', date: '2026-10-04', amount: 50000, note: 'Mua bóng', fund: 'extra', createdAt: 0 },
+      { id: 'e2', date: '2026-10-04', amount: 30000, note: 'Tiền sân', fund: 'main', createdAt: 0 },
+    ],
+    incomes: [{ id: 'i1', date: '2026-10-01', amount: 200000, note: 'Ủng hộ', by: 'A Sơn', fund: 'extra', createdAt: 0 }],
+  })
+
+  it('gộp tiền nước + quỹ tháng, đánh dấu đã đóng', () => {
+    const obs = buildObligations(d)
+    expect(obs).toHaveLength(6)
+    expect(obs.filter((o) => o.paid).map((o) => o.id).sort()).toEqual(['monthly_2026-10_a', 'water_m1_c'])
+  })
+
+  it('xếp người nợ nhiều nhất lên đầu, bỏ người đã đóng đủ', () => {
+    const list = debtors(d)
+    expect(list.map((x) => [x.member.id, x.total])).toEqual([
+      ['d', 120000],
+      ['b', 100000],
+      ['c', 100000],
+    ])
+  })
+
+  it('hai quỹ tách riêng: quỹ tháng → quỹ bóng đá; phạt + ủng hộ → quỹ ủng hộ', () => {
+    const f = fundSummary(d)
+    expect(f.main).toEqual({ dues: 100000, other: 0, income: 100000, spent: 30000, balance: 70000 })
+    expect(f.extra).toEqual({ dues: 20000, other: 200000, income: 220000, spent: 50000, balance: 170000 })
+  })
+
+  it('mức quỹ tháng riêng từng người', () => {
+    const d2 = data({ months: [{ id: '2026-10', amounts: { a: 500000, b: 100000 }, createdAt: 0 }] })
+    expect(debtors(d2).map((x) => [x.member.id, x.total])).toEqual([
+      ['a', 500000],
+      ['b', 100000],
+    ])
+  })
+
+  it('tin nhắc có tên, số tiền, tổng', () => {
+    const msg = reminderMessage(d, debtors(d), '2026-10-04')
+    expect(msg).toContain('Còn 3 bạn')
+    expect(msg).toContain('D: 120.000đ')
+    expect(msg).toContain('Tổng còn thiếu: 320.000đ')
+  })
+})

@@ -1,0 +1,26 @@
+rules_version = '2';
+
+// Ai có link cũng XEM được (cả đội cùng theo dõi).
+// Chỉ thủ quỹ / admin trong danh sách email dưới đây mới được SỬA.
+// Thêm người: thêm email vào danh sách, rồi chạy lại `firebase deploy --only firestore:rules`.
+// Nhớ thêm cùng email đó vào VITE_ADMIN_EMAILS trong file .env để giao diện hiện nút sửa.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAdmin() {
+      return request.auth != null
+        && request.auth.token.email_verified == true
+        && request.auth.token.email.lower() in [
+          'vietthanh228@gmail.com'
+        ];
+    }
+
+    function known(coll) {
+      return coll in ['members', 'matches', 'months', 'payments', 'expenses', 'incomes', 'config'];
+    }
+
+    match /{coll}/{docId} {
+      allow read: if known(coll);
+      allow write: if known(coll) && isAdmin();
+    }
+  }
+}
