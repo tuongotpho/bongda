@@ -154,6 +154,18 @@ export function buildObligations(data: AppData): Obligation[] {
   return out.sort((a, b) => a.date.localeCompare(b.date))
 }
 
+/**
+ * Khoản tiền phạt đã ghi "đã đóng" của trận nhưng không còn khớp với kết quả/đội hình hiện tại
+ * (đổi kết quả, chuyển người sang đội kia, xoá người khỏi trận, mức phạt đổi khi chuyển thắng ↔ hoà).
+ * Không gỡ thì tiền vẫn bị cộng vào quỹ và tiền ứng vẫn bị trừ dù người đó không còn nợ.
+ */
+export function stalePayments(m: Match, payments: Payment[]): Payment[] {
+  const owed = new Map(waterCharges(m).map((c) => [c.memberId, c.amount]))
+  return payments.filter(
+    (p) => p.kind === 'water' && p.refId === m.id && owed.get(p.memberId) !== p.amount,
+  )
+}
+
 // ---------- Tiền ứng trước phạt nước ----------
 
 export const ADVANCE_NOTE = 'Trừ từ tiền ứng trước'

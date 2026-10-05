@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import LineupImageModal from '../LineupImageModal'
 import { type LineupImageParams } from '../lineupImage'
 import { fmtDate, matchOutcome, money, newId, splitTeams, todayISO } from '../logic'
-import { store } from '../store'
+import { saveMatch } from '../actions'
 import type { Match } from '../types'
 import { Btn, Card, Empty, Field, Modal, copyText, inputCls, name, useApp } from '../ui'
 
@@ -191,7 +191,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
           createdAt: Date.now(),
         }
 
-    await store.put('matches', m.id, m)
+    if (!(await saveMatch(m, data, m.scoreA != null && m.scoreB != null))) return
     toast(editMatch ? `Đã cập nhật trận ngày ${fmtDate(date)} (${finalA.length + finalB.length} người)!` : 'Đã lưu trận mới vào sổ.')
     setTeams(null)
     setPicked(new Set())
@@ -598,8 +598,8 @@ function PastMatchDetailModal({
     const nextA = inA ? match.teamA.filter((x) => x !== id) : [...match.teamA, id]
     const nextB = inA ? [...match.teamB, id] : match.teamB.filter((x) => x !== id)
     const nextMatch: Match = { ...match, teamA: nextA, teamB: nextB }
+    if (!(await saveMatch(nextMatch, ctx.data))) return
     setMatch(nextMatch)
-    await store.put('matches', nextMatch.id, nextMatch)
     toast(`Đã chuyển ${name(ctx, id)} sang Đội ${inA ? 'B' : 'A'}`)
   }
 
@@ -614,8 +614,8 @@ function PastMatchDetailModal({
     const nextA = match.teamA.filter((x) => x !== id)
     const nextB = match.teamB.filter((x) => x !== id)
     const nextMatch: Match = { ...match, teamA: nextA, teamB: nextB }
+    if (!(await saveMatch(nextMatch, ctx.data))) return
     setMatch(nextMatch)
-    await store.put('matches', nextMatch.id, nextMatch)
     toast(`Đã xoá ${pName} khỏi danh sách trận đấu.`)
   }
 
@@ -633,8 +633,8 @@ function PastMatchDetailModal({
     }
     const res = splitTeams(players)
     const nextMatch: Match = { ...match, teamA: res.teamA, teamB: res.teamB }
+    if (!(await saveMatch(nextMatch, ctx.data))) return
     setMatch(nextMatch)
-    await store.put('matches', nextMatch.id, nextMatch)
     toast('Đã chia lại 2 đội ngẫu nhiên cân bằng!')
   }
 

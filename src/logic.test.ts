@@ -9,6 +9,7 @@ import {
   matchOutcome,
   reminderMessage,
   splitTeams,
+  stalePayments,
   waterCharges,
 } from './logic'
 import { DEFAULT_SETTINGS, type AppData, type Match, type Member } from './types'
@@ -216,3 +217,30 @@ describe('tiền ứng trước phạt thua', () => {
   })
 })
 
+describe('khoản đã đóng không còn khớp (giữ sổ quỹ đúng khi sửa trận)', () => {
+  const pay = (memberId: string, amount = 20000, refId = 'm1') => ({
+    id: `water_${refId}_${memberId}`, memberId, kind: 'water' as const, refId, amount, paidAt: 0,
+  })
+
+  it('đổi kết quả A thắng → B thắng: khoản đã đóng của đội B cũ bị gỡ', () => {
+    const payments = [pay('c'), pay('d')]
+    expect(stalePayments(match(), payments)).toEqual([])
+    expect(stalePayments(match({ scoreA: 0, scoreB: 2 }), payments).map((p) => p.memberId)).toEqual(['c', 'd'])
+  })
+
+  it('chuyển người sang đội thắng / xoá khỏi trận: khoản của người đó bị gỡ', () => {
+    const payments = [pay('c'), pay('d')]
+    expect(stalePayments(match({ teamA: ['a', 'b', 'c'], teamB: ['d'] }), payments).map((p) => p.memberId)).toEqual(['c'])
+    expect(stalePayments(match({ teamB: ['c'] }), payments).map((p) => p.memberId)).toEqual(['d'])
+  })
+
+  it('thắng → hoà (luật chia đôi): mức phạt đổi nên khoản cũ không còn khớp', () => {
+    expect(stalePayments(match({ scoreA: 1, scoreB: 1 }), [pay('c')])).toHaveLength(1)
+    expect(stalePayments(match({ scoreA: 1, scoreB: 1 }), [pay('c', 10000)])).toEqual([])
+  })
+
+  it('không đụng khoản của trận khác hoặc quỹ tháng', () => {
+    const other = [pay('a', 20000, 'm2'), { ...pay('a'), kind: 'monthly' as const }]
+    expect(stalePayments(match(), other)).toEqual([])
+  })
+})

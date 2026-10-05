@@ -1,9 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import LineupImageModal from '../LineupImageModal'
 import { type LineupImageParams } from '../lineupImage'
-import { deleteMatch, setPaid } from '../actions'
-import { ADVANCE_NOTE, autoDeductMatchAdvance, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, money, splitTeams } from '../logic'
-import { store } from '../store'
+import { deleteMatch, saveMatch, setPaid } from '../actions'
+import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
 
@@ -67,6 +66,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
               const o = matchOutcome(m)
               const obs = obligations.filter((x) => x.kind === 'water' && x.refId === m.id)
               const unpaid = obs.filter((x) => !x.paid).length
+              const unpaidAmount = obs.filter((x) => !x.paid).reduce((s, x) => s + x.amount, 0)
               return (
                 <li key={m.id}>
                   <button
@@ -135,7 +135,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
                         <span className="text-slate-400">Không phát sinh tiền phạt</span>
                       ) : unpaid > 0 ? (
                         <span className="font-semibold text-red-600">
-                          ⚠️ {unpaid}/{obs.length} người chưa nộp phạt ({money(unpaid * m.waterFee)})
+                          ⚠️ {unpaid}/{obs.length} người chưa nộp phạt ({money(unpaidAmount)})
                         </span>
                       ) : (
                         <span className="font-semibold text-green-700">
@@ -225,11 +225,7 @@ function MatchModal({
     const inA = m.teamA.includes(id)
     const nextA = inA ? m.teamA.filter((x) => x !== id) : [...m.teamA, id]
     const nextB = inA ? [...m.teamB, id] : m.teamB.filter((x) => x !== id)
-    await store.put('matches', m.id, {
-      ...m,
-      teamA: nextA,
-      teamB: nextB,
-    })
+    if (!(await saveMatch({ ...m, teamA: nextA, teamB: nextB }, ctx.data))) return
     toast(`Đã chuyển ${name(ctx, id)} sang Đội ${inA ? 'B' : 'A'}`)
   }
 
@@ -243,11 +239,7 @@ function MatchModal({
     if (!confirm(`Xoá cầu thủ "${pName}" khỏi trận ngày ${fmtDate(m.date)}?`)) return
     const nextA = m.teamA.filter((x) => x !== id)
     const nextB = m.teamB.filter((x) => x !== id)
-    await store.put('matches', m.id, {
-      ...m,
-      teamA: nextA,
-      teamB: nextB,
-    })
+    if (!(await saveMatch({ ...m, teamA: nextA, teamB: nextB }, ctx.data))) return
     toast(`Đã xoá ${pName} khỏi danh sách trận đấu.`)
   }
 
@@ -264,11 +256,7 @@ function MatchModal({
       return
     }
     const res = splitTeams(players)
-    await store.put('matches', m.id, {
-      ...m,
-      teamA: res.teamA,
-      teamB: res.teamB,
-    })
+    if (!(await saveMatch({ ...m, teamA: res.teamA, teamB: res.teamB }, ctx.data))) return
     toast('Đã chia lại 2 đội ngẫu nhiên cân bằng!')
   }
 
@@ -300,7 +288,8 @@ function MatchModal({
       note: note.trim() || undefined,
     }
 
-    await store.put('matches', m.id, updatedMatch)
+    const deducted = await saveMatch(updatedMatch, ctx.data, a != null && b != null)
+    if (!deducted) return
     setScoreA(a?.toString() ?? '')
     setScoreB(b?.toString() ?? '')
     setPenaltyWinner(pWinner)
@@ -308,16 +297,9 @@ function MatchModal({
     setPenaltyScoreB(pB?.toString() ?? '')
 
     if (a != null && b != null) {
-      // Tự động kiểm tra và trừ tiền ứng cho người đội thua nếu họ có số dư ứng
-      const { paymentsToAdd, deductedMemberIds } = autoDeductMatchAdvance(updatedMatch, ctx.data)
-      if (paymentsToAdd.length > 0) {
-        for (const p of paymentsToAdd) {
-          await store.put('payments', p.id, p)
-        }
-      }
-
-      const deductedNames = deductedMemberIds.map((id) => name(ctx, id)).join(', ')
-      const advMsg = deductedMemberIds.length > 0 ? ` · Đã trừ tiền ứng cho: ${deductedNames} 💧` : ''
+      // saveMatch đã tự trừ tiền ứng cho người đội thua nếu họ còn số dư ứng
+      const deductedNames = deducted.map((id) => name(ctx, id)).join(', ')
+      const advMsg = deducted.length > 0 ? ` · Đã trừ tiền ứng cho: ${deductedNames} 💧` : ''
 
       if (isTied && pWinner) {
         toast(`Đã lưu kết quả: ${a} – ${b} (Đội ${pWinner} thắng Pen ⚽)${advMsg}`)
@@ -411,7 +393,7 @@ function MatchModal({
   }
 
   const del = async () => {
-    const paidCount = obs.filter((x) => x.paid).length
+    const paidCount = ctx.data.payments.filter((p) => p.kind === 'water' && p.refId === m.id).length
     if (
       !confirm(
         `Xoá trận ${fmtDate(m.date)}?${
@@ -420,7 +402,7 @@ function MatchModal({
       )
     )
       return
-    await deleteMatch(m.id, [...m.teamA, ...m.teamB])
+    await deleteMatch(m.id, ctx.data.payments)
     onClose()
     toast('Đã xoá trận')
   }
