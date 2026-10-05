@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type { LineupImageParams } from '../lineupImage'
 import { deleteMatch, saveMatch, setPaid } from '../actions'
-import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, money, splitTeams } from '../logic'
+import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, outcomeLabel, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
 import { Icon } from '../icons'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
@@ -192,7 +192,7 @@ function MatchModal({
   const [penaltyWinner, setPenaltyWinner] = useState<'A' | 'B' | null>(m.penaltyWinner ?? null)
   const [penaltyScoreA, setPenaltyScoreA] = useState(m.penaltyScoreA?.toString() ?? '')
   const [penaltyScoreB, setPenaltyScoreB] = useState(m.penaltyScoreB?.toString() ?? '')
-  const hasResult = (m.scoreA != null && m.scoreB != null) || !!m.charges
+  const hasResult = matchOutcome(m) !== 'pending' || !!m.charges
   const [view, setView] = useState<'lineup' | 'result'>(hasResult ? 'result' : 'lineup')
   // Chỉ đổi thẻ khi chuyển sang trận khác (không reset mỗi lần lưu dữ liệu)
   useEffect(() => setView(hasResult ? 'result' : 'lineup'), [m.id]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -256,83 +256,70 @@ function MatchModal({
     toast('Đã chia lại 2 đội ngẫu nhiên cân bằng!')
   }
 
-  // Lưu tỉ số và thông tin trận (bao gồm cả phân định luân lưu penalty nếu hòa)
-  const saveWithScores = async (
+  // Lưu kết quả trận. Tỉ số có thì tỉ số quyết định; không có tỉ số thì dùng "đội thắng" chọn nhanh.
+  // Không bao giờ tự nghĩ ra tỉ số.
+  const saveResult = async (
     a: number | null,
     b: number | null,
-    penWinner?: 'A' | 'B' | null,
-    penA?: number | null,
-    penB?: number | null,
+    opts: { winner?: 'A' | 'B' | 'draw' | null; penWinner?: 'A' | 'B' | null; penA?: number | null; penB?: number | null; extra?: string } = {},
   ) => {
     if (!canEdit) {
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để ghi nhận kết quả.')
       return
     }
-    const isTied = a != null && b != null && a === b
-    const pWinner = isTied ? (penWinner !== undefined ? penWinner : penaltyWinner) : null
-    const pA = isTied ? (penA !== undefined ? penA : toNum(penaltyScoreA)) : null
-    const pB = isTied ? (penB !== undefined ? penB : toNum(penaltyScoreB)) : null
+    const scored = a != null && b != null
+    const winner = scored ? null : (opts.winner ?? null)
+    const tied = scored ? a === b : winner === 'draw'
+    const pWinner = tied ? (opts.penWinner !== undefined ? opts.penWinner : penaltyWinner) : null
+    const pA = tied ? (opts.penA !== undefined ? opts.penA : toNum(penaltyScoreA)) : null
+    const pB = tied ? (opts.penB !== undefined ? opts.penB : toNum(penaltyScoreB)) : null
 
     const updatedMatch: Match = {
       ...m,
-      scoreA: a,
-      scoreB: b,
+      scoreA: scored ? a : null,
+      scoreB: scored ? b : null,
+      winner,
       penaltyWinner: pWinner,
       penaltyScoreA: pA,
       penaltyScoreB: pB,
       date,
       note: note.trim() || undefined,
     }
+    const decided = matchOutcome(updatedMatch) !== 'pending'
 
-    const deducted = await saveMatch(updatedMatch, ctx.data, a != null && b != null)
+    const deducted = await saveMatch(updatedMatch, ctx.data, decided)
     if (!deducted) return
-    setScoreA(a?.toString() ?? '')
-    setScoreB(b?.toString() ?? '')
+    setScoreA(scored ? String(a) : '')
+    setScoreB(scored ? String(b) : '')
     setPenaltyWinner(pWinner)
     setPenaltyScoreA(pA?.toString() ?? '')
     setPenaltyScoreB(pB?.toString() ?? '')
 
-    if (a != null && b != null) {
-      // saveMatch đã tự trừ tiền ứng cho người đội thua nếu họ còn số dư ứng
-      const deductedNames = deducted.map((id) => name(ctx, id)).join(', ')
-      const advMsg = deducted.length > 0 ? ` · Đã trừ tiền ứng cho: ${deductedNames} 💧` : ''
-
-      if (isTied && pWinner) {
-        toast(`Đã lưu kết quả: ${a} – ${b} (Đội ${pWinner} thắng luân lưu)${advMsg}`)
-      } else {
-        toast(`Đã lưu kết quả: ${a} – ${b}${advMsg}`)
-      }
-    } else {
-      toast('Đã xóa tỉ số trận đấu')
-    }
+    if (!decided) return toast('Đã xoá kết quả trận đấu')
+    // saveMatch đã tự trừ tiền ứng cho người đội thua nếu họ còn số dư ứng
+    const advMsg = deducted.length > 0 ? ` · Đã trừ tiền ứng cho: ${deducted.map((id) => name(ctx, id)).join(', ')}` : ''
+    const what = scored ? `${a} – ${b}` : winner === 'draw' ? 'Hoà (chưa ghi tỉ số)' : `Đội ${winner} thắng (chưa ghi tỉ số)`
+    toast(`Đã lưu: ${what}${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}${advMsg}${opts.extra ?? ''}`)
   }
 
-  // Nút bấm nhanh thắng / hoà / thua
-  const setQuickWinner = (winner: 'A' | 'B' | 'draw' | 'clear') => {
-    if (winner === 'A') {
-      const curA = toNum(scoreA) ?? 0
-      const curB = toNum(scoreB) ?? 0
-      const nextA = curA > curB ? curA : curB + 1
-      saveWithScores(nextA, curB, null, null, null)
-    } else if (winner === 'B') {
-      const curA = toNum(scoreA) ?? 0
-      const curB = toNum(scoreB) ?? 0
-      const nextB = curB > curA ? curB : curA + 1
-      saveWithScores(curA, nextB, null, null, null)
-    } else if (winner === 'draw') {
-      const curA = toNum(scoreA) ?? 1
-      saveWithScores(curA, curA, null, null, null)
-    } else {
-      saveWithScores(null, null, null, null, null)
-    }
+  // Nút chọn nhanh thắng / hoà: giữ tỉ số đã nhập nếu khớp, không khớp hoặc chưa nhập thì để trống tỉ số
+  const setQuickWinner = (w: 'A' | 'B' | 'draw' | 'clear') => {
+    if (w === 'clear') return saveResult(null, null, { winner: null, penWinner: null, penA: null, penB: null })
+    const a = toNum(scoreA)
+    const b = toNum(scoreB)
+    const fits = a != null && b != null && (w === 'A' ? a > b : w === 'B' ? b > a : a === b)
+    if (fits) return saveResult(a, b, { penWinner: null, penA: null, penB: null })
+    const extra = a != null && b != null ? ` · tỉ số cũ ${a} – ${b} không khớp nên đã bỏ` : ''
+    return saveResult(null, null, { winner: w, penWinner: null, penA: null, penB: null, extra })
   }
 
-  // Nút bấm phân định luân lưu penalty khi hòa tỉ số
-  const setQuickPenalty = (winner: 'A' | 'B' | null) => {
-    const curA = toNum(scoreA) ?? 1
-    const curB = toNum(scoreB) ?? 1
-    const tieScore = curA === curB ? curA : 1
-    saveWithScores(tieScore, tieScore, winner, toNum(penaltyScoreA), toNum(penaltyScoreB))
+  // Nút phân định luân lưu khi hoà
+  const setQuickPenalty = (pw: 'A' | 'B' | null) => {
+    const a = toNum(scoreA)
+    const b = toNum(scoreB)
+    const pen = { penWinner: pw, penA: toNum(penaltyScoreA), penB: toNum(penaltyScoreB) }
+    if (a != null && b != null && a === b) return saveResult(a, b, pen)
+    return saveResult(null, null, { ...pen, winner: 'draw' })
   }
 
   const handleManualSave = async () => {
@@ -342,13 +329,12 @@ function MatchModal({
     const pa = toNum(penaltyScoreA)
     const pb = toNum(penaltyScoreB)
     let pWinner = penaltyWinner
-    if (a != null && b != null && a === b) {
-      if (pa != null && pb != null) {
-        if (pa > pb) pWinner = 'A'
-        else if (pb > pa) pWinner = 'B'
-      }
+    if (pa != null && pb != null) {
+      if (pa > pb) pWinner = 'A'
+      else if (pb > pa) pWinner = 'B'
     }
-    await saveWithScores(a, b, pWinner, pa, pb)
+    // Để trống tỉ số = giữ nguyên kết quả chọn nhanh (nếu có)
+    await saveResult(a, b, { winner: m.winner ?? null, penWinner: pWinner, penA: pa, penB: pb })
   }
 
   // Thu tất cả tiền phạt của trận này trong 1 cú click
@@ -360,14 +346,8 @@ function MatchModal({
     const targetObs = obs.filter((x) => x.paid !== paid)
     if (!targetObs.length) return
     for (const x of targetObs) {
-      if (!paid) {
-        await setPaid(x, false)
-      } else {
-        const mem = ctx.memberById.get(x.memberId)
-        const adv = mem ? getMemberAdvanceInfo(mem, ctx.data.payments) : null
-        const note = adv && adv.remaining >= x.amount ? ADVANCE_NOTE : undefined
-        await setPaid(x, true, note)
-      }
+      // "Thu đủ cả đội" = thu tiền mặt; ai muốn trừ tiền ứng thì bấm nút "Trừ tiền ứng" của người đó
+      await setPaid(x, paid)
     }
     toast(paid ? `Đã gạch nợ cho toàn bộ ${targetObs.length} thành viên!` : 'Đã hủy đánh dấu đã nộp.')
   }
@@ -408,7 +388,7 @@ function MatchModal({
   const openLineupImage = () => {
     const numA = toNum(scoreA)
     const numB = toNum(scoreB)
-    const isFinished = (numA != null && numB != null) || (m.scoreA != null && m.scoreB != null)
+    const isFinished = (numA != null && numB != null) || o !== 'pending'
     const finalScoreA = numA ?? m.scoreA
     const finalScoreB = numB ?? m.scoreB
 
@@ -465,7 +445,7 @@ function MatchModal({
               {allMatches.map((match) => (
                 <option key={match.id} value={match.id}>
                   {fmtDate(match.date)} — {match.teamA.length + match.teamB.length} người{' '}
-                  {match.scoreA != null ? `(${match.scoreA} - ${match.scoreB})` : '(chưa có tỉ số)'}
+                  {match.scoreA != null ? `(${match.scoreA} - ${match.scoreB})` : matchOutcome(match) === 'pending' ? '(chưa có kết quả)' : `(${outcomeLabel(match)})`}
                 </option>
               ))}
             </select>
@@ -687,7 +667,7 @@ function MatchModal({
                 {o === 'pending'
                   ? 'Trận đấu chưa nhập kết quả'
                   : isPenaltyDecided(m)
-                    ? `Hoà ${m.scoreA}–${m.scoreB} · Đội ${o} thắng Pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
+                    ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} · Đội ${o} thắng pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
                     : o === 'draw'
                       ? 'Kết quả: Hoà'
                       : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
@@ -955,10 +935,7 @@ function MatchModal({
                         {canEdit ? (
                           <PayToggle
                             paid={x.paid}
-                            onChange={(p) => {
-                              const note = !p ? undefined : (advInfo && advInfo.remaining >= x.amount ? ADVANCE_NOTE : undefined)
-                              setPaid(x, p, note)
-                            }}
+                            onChange={(p) => setPaid(x, p)}
                           />
                         ) : (
                           <PaidBadge paid={x.paid} />

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { deleteMonth, setPaid } from '../actions'
-import { fmtDate, fmtMonth, fundSummary, money, newId, obligationId, todayISO } from '../logic'
+import { advanceHeld, fmtDate, fmtMonth, fundSummary, money, newId, obligationId, todayISO } from '../logic'
 import { store } from '../store'
 import { FUND_NAMES, type Expense, type FundId, type FundMonth, type Income } from '../types'
 import { Icon } from '../icons'
@@ -10,6 +10,7 @@ import { PayToggle } from './Matches'
 export default function Fund() {
   const { data, canEdit } = useApp()
   const fund = fundSummary(data)
+  const held = advanceHeld(data)
   const months = useMemo(() => [...data.months].sort((a, b) => b.id.localeCompare(a.id)), [data.months])
   const [openMonth, setOpenMonth] = useState<string | null>(null)
   const [creating, setCreating] = useState(false)
@@ -30,6 +31,20 @@ export default function Fund() {
               <div>Ủng hộ / thu khác: {money(fund[f].other)}</div>
               <div>Đã chi: −{money(fund[f].spent)}</div>
             </div>
+            {/* Tiền ứng chỉ liên quan quỹ phạt: hiện riêng để số tiền thủ quỹ cầm khớp với sổ */}
+            {f === 'extra' && held.total > 0 && (
+              <div className="mt-3 space-y-1 rounded-xl bg-sky-50 p-2.5 text-xs text-sky-900">
+                <div className="flex justify-between gap-2">
+                  <span>Tiền ứng đang giữ hộ ({held.people} người)</span>
+                  <b>+{money(held.total)}</b>
+                </div>
+                <div className="flex justify-between gap-2 border-t border-sky-200 pt-1">
+                  <span>Thủ quỹ cầm thực tế</span>
+                  <b>{money(fund.extra.balance + held.total)}</b>
+                </div>
+                <p className="text-[11px] text-sky-800">Tiền ứng chưa phải tiền quỹ — vào quỹ khi bị trừ vào trận thua.</p>
+              </div>
+            )}
             {canEdit && (
               <div className="mt-3 flex gap-2">
                 <Btn kind="soft" className="flex-1 px-2 text-xs" onClick={() => setEntry({ type: 'in', fund: f })}>

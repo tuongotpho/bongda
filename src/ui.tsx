@@ -160,7 +160,8 @@ export function useToast() {
   const [msg, setMsg] = useState<string | null>(null)
   useEffect(() => {
     if (!msg) return
-    const t = setTimeout(() => setMsg(null), 2200)
+    // câu dài (vd. danh sách người bị trừ tiền ứng) hiện lâu hơn cho kịp đọc
+    const t = setTimeout(() => setMsg(null), Math.min(7000, Math.max(2200, msg.length * 50)))
     return () => clearTimeout(t)
   }, [msg])
   const node = msg ? (

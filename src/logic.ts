@@ -69,11 +69,22 @@ export function splitTeams(players: Member[], rng: () => number = Math.random, t
 
 export type MatchOutcome = 'A' | 'B' | 'draw' | 'pending'
 
+const hasScore = (m: Match) => m.scoreA != null && m.scoreB != null
+
+/** Hoà (tính trước luân lưu): theo tỉ số nếu có, không thì theo kết quả chọn nhanh */
+const isTied = (m: Match) => (hasScore(m) ? m.scoreA === m.scoreB : m.winner === 'draw')
+
 export function matchOutcome(m: Match): MatchOutcome {
-  if (m.scoreA == null || m.scoreB == null) return 'pending'
-  if (m.scoreA > m.scoreB) return 'A'
-  if (m.scoreB > m.scoreA) return 'B'
-  // Khi hòa tỉ số: xét kết quả đá luân lưu penalty nếu có
+  if (hasScore(m)) {
+    if (m.scoreA! > m.scoreB!) return 'A'
+    if (m.scoreB! > m.scoreA!) return 'B'
+  } else if (m.winner === 'A' || m.winner === 'B') {
+    // Chọn nhanh đội thắng mà không ghi tỉ số — không bịa tỉ số
+    return m.winner
+  } else if (m.winner !== 'draw') {
+    return 'pending'
+  }
+  // Khi hòa: xét kết quả đá luân lưu penalty nếu có
   if (m.penaltyWinner === 'A') return 'A'
   if (m.penaltyWinner === 'B') return 'B'
   if (m.penaltyScoreA != null && m.penaltyScoreB != null) {
@@ -83,9 +94,15 @@ export function matchOutcome(m: Match): MatchOutcome {
   return 'draw'
 }
 
+/** Kết quả bằng chữ — dùng khi trận chọn nhanh đội thắng mà không ghi tỉ số */
+export function outcomeLabel(m: Match): string {
+  const o = matchOutcome(m)
+  return o === 'pending' ? 'Chưa có kết quả' : o === 'draw' ? 'Hoà' : `Đội ${o} thắng`
+}
+
 /** Kiểm tra trận đấu có phân định bằng đá luân lưu penalty khi hòa tỉ số không */
 export function isPenaltyDecided(m: Match): boolean {
-  if (m.scoreA == null || m.scoreB == null || m.scoreA !== m.scoreB) return false
+  if (!isTied(m)) return false
   if (m.penaltyWinner === 'A' || m.penaltyWinner === 'B') return true
   if (m.penaltyScoreA != null && m.penaltyScoreB != null && m.penaltyScoreA !== m.penaltyScoreB) return true
   return false
@@ -93,7 +110,7 @@ export function isPenaltyDecided(m: Match): boolean {
 
 /** Lấy đội thắng luân lưu penalty: 'A' | 'B' | null */
 export function getPenaltyWinner(m: Match): 'A' | 'B' | null {
-  if (m.scoreA == null || m.scoreB == null || m.scoreA !== m.scoreB) return null
+  if (!isTied(m)) return null
   if (m.penaltyWinner === 'A' || m.penaltyWinner === 'B') return m.penaltyWinner
   if (m.penaltyScoreA != null && m.penaltyScoreB != null) {
     if (m.penaltyScoreA > m.penaltyScoreB) return 'A'
@@ -239,6 +256,23 @@ export function autoDeductMatchAdvance(
   }
 
   return { paymentsToAdd, deductedMemberIds }
+}
+
+/**
+ * Tiền ứng anh em đã đưa trước nhưng CHƯA bị trừ vào trận nào — thủ quỹ đang cầm hộ.
+ * Không cộng vào số dư quỹ (chưa phải tiền của quỹ); hiện riêng để đối chiếu tiền mặt.
+ */
+export function advanceHeld(data: AppData): { total: number; people: number } {
+  let total = 0
+  let people = 0
+  for (const m of data.members) {
+    const left = getMemberAdvanceInfo(m, data.payments).remaining
+    if (left > 0) {
+      total += left
+      people++
+    }
+  }
+  return { total, people }
 }
 
 export interface MemberDebt {

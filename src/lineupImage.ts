@@ -166,10 +166,16 @@ export async function generateLineupCanvas(params: LineupImageParams): Promise<H
   // Nếu là trận ĐÃ ĐÁ XONG (isPostMatch):
   if (isPostMatch) {
     // 2.1 Hộp hiển thị Tỉ số trận đấu
-    const hasPen =
-      (scoreA != null && scoreB != null && scoreA === scoreB && (penaltyWinner || (penaltyScoreA != null && penaltyScoreB != null)))
+    const scored = scoreA != null && scoreB != null
+    const tied = scored ? scoreA === scoreB : outcome === 'draw' || !!penaltyWinner
+    const hasPen = tied && (penaltyWinner || (penaltyScoreA != null && penaltyScoreB != null))
 
-    let scoreLine = `🟦 ĐỘI A   ${scoreA ?? 0} – ${scoreB ?? 0}   ĐỘI B 🟧`
+    // Không có tỉ số (chọn nhanh đội thắng) thì ghi kết quả bằng chữ — không bịa "0 – 0"
+    let scoreLine = scored
+      ? `🟦 ĐỘI A   ${scoreA} – ${scoreB}   ĐỘI B 🟧`
+      : tied
+        ? '🟦 ĐỘI A   HOÀ   ĐỘI B 🟧'
+        : `🟦 ĐỘI A   ${outcome === 'A' ? 'THẮNG' : 'THUA'}   ĐỘI B 🟧`
     if (hasPen) {
       if (penaltyScoreA != null && penaltyScoreB != null) {
         scoreLine += `  (Pen: ${penaltyScoreA}-${penaltyScoreB} · Đội ${penaltyWinner} thắng)`

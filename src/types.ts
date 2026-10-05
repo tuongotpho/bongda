@@ -39,6 +39,8 @@ export interface Match {
   teamB: string[]
   scoreA: number | null
   scoreB: number | null
+  /** Kết quả chọn nhanh khi KHÔNG ghi tỉ số (có tỉ số thì tỉ số quyết định) */
+  winner?: 'A' | 'B' | 'draw' | null
   /** Đá luân lưu penalty khi hòa tỉ số */
   penaltyWinner?: 'A' | 'B' | null
   penaltyScoreA?: number | null

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import type { LineupImageParams } from '../lineupImage'
-import { fmtDate, matchOutcome, money, newId, splitTeams, todayISO } from '../logic'
+import { fmtDate, matchOutcome, outcomeLabel, money, newId, splitTeams, todayISO } from '../logic'
 import { saveMatch } from '../actions'
 import type { Match } from '../types'
 import { Icon } from '../icons'
@@ -65,7 +65,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       .sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)
   }, [data.matches])
 
-  const upcoming = useMemo(() => matchesWithLineup.filter((m) => m.scoreA == null), [matchesWithLineup])
+  const upcoming = useMemo(() => matchesWithLineup.filter((m) => matchOutcome(m) === 'pending'), [matchesWithLineup])
 
   const toggle = (id: string) => {
     setPicked((s) => {
@@ -199,7 +199,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
           createdAt: Date.now(),
         }
 
-    if (!(await saveMatch(m, data, m.scoreA != null && m.scoreB != null))) return
+    if (!(await saveMatch(m, data, matchOutcome(m) !== 'pending'))) return
     toast(editMatch ? `Đã cập nhật trận ngày ${fmtDate(date)} (${finalA.length + finalB.length} người)!` : 'Đã lưu trận mới vào sổ.')
     setTeams(null)
     setPicked(new Set())
@@ -434,7 +434,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               <Btn
                 kind="soft"
                 onClick={() => {
-                  const isFinished = !!(editMatch && editMatch.scoreA != null && editMatch.scoreB != null)
+                  const isFinished = !!editMatch && matchOutcome(editMatch) !== 'pending'
                   const editObs = editMatch ? ctx.obligations.filter((x) => x.kind === 'water' && x.refId === editMatch.id) : []
                   const paidByMemberId = new Map(editObs.map((x) => [x.memberId, x.paid]))
                   const chargedMemberIds = new Set(editObs.map((x) => x.memberId))
@@ -505,7 +505,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
           onReusePlayers={() => loadPlayersFromMatch(viewMatch)}
           onCopyLineup={() => copyLineup({ teamA: viewMatch.teamA, teamB: viewMatch.teamB }, viewMatch.date)}
           onExportImage={() => {
-            const isFinished = viewMatch.scoreA != null && viewMatch.scoreB != null
+            const isFinished = matchOutcome(viewMatch) !== 'pending'
             const pastObs = ctx.obligations.filter((x) => x.kind === 'water' && x.refId === viewMatch.id)
             const paidByMemberId = new Map(pastObs.map((x) => [x.memberId, x.paid]))
             const chargedMemberIds = new Set(pastObs.map((x) => x.memberId))
@@ -667,7 +667,7 @@ function PastMatchDetailModal({
             >
               {allMatches.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {fmtDate(m.date)} — {m.teamA.length + m.teamB.length} người {m.scoreA != null ? `(${m.scoreA} - ${m.scoreB})` : '(chưa đá)'}
+                  {fmtDate(m.date)} — {m.teamA.length + m.teamB.length} người {m.scoreA != null ? `(${m.scoreA} - ${m.scoreB})` : matchOutcome(m) === 'pending' ? '(chưa đá)' : `(${outcomeLabel(m)})`}
                 </option>
               ))}
             </select>
@@ -681,9 +681,9 @@ function PastMatchDetailModal({
             {match.note && <span className="ml-2 text-slate-500">· {match.note}</span>}
           </div>
           <div>
-            {match.scoreA != null && match.scoreB != null ? (
+            {matchOutcome(match) !== 'pending' ? (
               <span className="rounded-lg bg-green-100 px-2.5 py-1 font-bold text-green-900">
-                Tỉ số: {match.scoreA} – {match.scoreB}
+                {match.scoreA != null ? `Tỉ số: ${match.scoreA} – ${match.scoreB}` : outcomeLabel(match)}
               </span>
             ) : (
               <span className="rounded-lg bg-amber-100 px-2.5 py-1 font-medium text-amber-800">
@@ -720,10 +720,7 @@ function PastMatchDetailModal({
         <div className="grid grid-cols-2 gap-3 text-sm">
           {(['teamA', 'teamB'] as const).map((k) => {
             const list = k === 'teamA' ? match.teamA : match.teamB
-            const isWinner =
-              match.scoreA != null &&
-              match.scoreB != null &&
-              (k === 'teamA' ? match.scoreA > match.scoreB : match.scoreB > match.scoreA)
+            const isWinner = matchOutcome(match) === (k === 'teamA' ? 'A' : 'B')
 
             return (
               <div
@@ -848,9 +845,9 @@ function HistoryListModal({
                   >
                     <div className="flex items-center gap-2">
                       <span className="font-bold text-slate-800">{fmtDate(m.date)}</span>
-                      {m.scoreA != null ? (
+                      {matchOutcome(m) !== 'pending' ? (
                         <span className="rounded bg-slate-100 px-1.5 py-0.5 text-xs font-semibold text-slate-700">
-                          {m.scoreA} – {m.scoreB}
+                          {m.scoreA != null ? `${m.scoreA} – ${m.scoreB}` : outcomeLabel(m)}
                         </span>
                       ) : (
                         <span className="rounded bg-amber-100 px-1.5 py-0.5 text-xs text-amber-800">

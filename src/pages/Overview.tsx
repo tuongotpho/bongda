@@ -212,7 +212,7 @@ function LastMatch({ id }: { id: string }) {
         {o === 'pending'
           ? 'Chưa nhập tỉ số'
           : isPenaltyDecided(m)
-            ? `Hoà tỉ số (${m.scoreA}-${m.scoreB}) — Đội ${o} thắng luân lưu (Đội ${o === 'A' ? 'B' : 'A'} nộp tiền phạt)`
+            ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} — Đội ${o} thắng luân lưu (Đội ${o === 'A' ? 'B' : 'A'} nộp tiền phạt)`
             : o === 'draw'
               ? 'Hoà'
               : `Đội ${o} thắng — đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt`}

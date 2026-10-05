@@ -8,6 +8,7 @@ import SettingsModal from './pages/Settings'
 import Split from './pages/Split'
 import { isDemo, login, logout, store, watchAuth, type AuthState } from './store'
 import { DEFAULT_SETTINGS, type AppData } from './types'
+import InstallBanner from './InstallBanner'
 import { Icon, type IconName } from './icons'
 import { AppCtx, Btn, Modal, copyText, type Ctx, useToast } from './ui'
 
@@ -234,6 +235,7 @@ export default function App() {
               <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-slate-900">{current.label}</h1>
             </div>
           </div>
+          {tab === 'overview' && <InstallBanner />}
           <div key={tab} className="animate-fade-up">
             {!ready ? (
               <p className="py-10 text-center text-slate-500">Đang tải dữ liệu…</p>

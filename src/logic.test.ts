@@ -10,6 +10,9 @@ import {
   reminderMessage,
   splitTeams,
   stalePayments,
+  advanceHeld,
+  outcomeLabel,
+  isPenaltyDecided,
   waterCharges,
 } from './logic'
 import { DEFAULT_SETTINGS, type AppData, type Match, type Member } from './types'
@@ -242,5 +245,44 @@ describe('khoản đã đóng không còn khớp (giữ sổ quỹ đúng khi s�
   it('không đụng khoản của trận khác hoặc quỹ tháng', () => {
     const other = [pay('a', 20000, 'm2'), { ...pay('a'), kind: 'monthly' as const }]
     expect(stalePayments(match(), other)).toEqual([])
+  })
+})
+
+describe('chọn nhanh đội thắng không cần tỉ số (không bịa tỉ số)', () => {
+  const noScore = (over: Partial<Match>) => match({ scoreA: null, scoreB: null, ...over })
+
+  it('chỉ ghi đội thắng: đội thua vẫn bị phạt đủ', () => {
+    expect(matchOutcome(noScore({ winner: 'B' }))).toBe('B')
+    expect(waterCharges(noScore({ winner: 'B' })).map((c) => c.memberId)).toEqual(['a', 'b'])
+    expect(outcomeLabel(noScore({ winner: 'B' }))).toBe('Đội B thắng')
+  })
+
+  it('chọn nhanh hoà: tính theo luật hoà; có luân lưu thì đội thua pen bị phạt', () => {
+    expect(waterCharges(noScore({ winner: 'draw' })).every((c) => c.amount === 10000)).toBe(true)
+    const pen = noScore({ winner: 'draw', penaltyWinner: 'A' })
+    expect(isPenaltyDecided(pen)).toBe(true)
+    expect(waterCharges(pen).map((c) => c.memberId)).toEqual(['c', 'd'])
+  })
+
+  it('có tỉ số thì tỉ số quyết định, bỏ qua đội thắng chọn nhanh', () => {
+    expect(matchOutcome(match({ scoreA: 0, scoreB: 2, winner: 'A' }))).toBe('B')
+  })
+
+  it('không tỉ số, không đội thắng → chưa có kết quả, chưa ai nợ', () => {
+    expect(matchOutcome(noScore({}))).toBe('pending')
+    expect(outcomeLabel(noScore({}))).toBe('Chưa có kết quả')
+  })
+})
+
+describe('tiền ứng đang giữ hộ (đối chiếu tiền mặt thủ quỹ)', () => {
+  it('cộng phần ứng còn lại của từng người, không tính người đã hết ứng', () => {
+    const d = data({
+      members: [{ ...mem('a'), advanceAmount: 100000 }, { ...mem('b'), advanceAmount: 20000 }, mem('c')],
+      payments: [
+        { id: 'water_m1_a', memberId: 'a', kind: 'water', refId: 'm1', amount: 20000, paidAt: 0, note: ADVANCE_NOTE },
+        { id: 'water_m1_b', memberId: 'b', kind: 'water', refId: 'm1', amount: 20000, paidAt: 0, note: ADVANCE_NOTE },
+      ],
+    })
+    expect(advanceHeld(d)).toEqual({ total: 80000, people: 1 })
   })
 })
