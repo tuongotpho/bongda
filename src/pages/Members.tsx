@@ -3,8 +3,12 @@ import { setPaid } from '../actions'
 import { fmtDate, getMemberAdvanceInfo, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
 import { login, store } from '../store'
 import type { Member } from '../types'
-import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, useApp } from '../ui'
+import { Icon } from '../icons'
+import { Avatar, Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, useApp } from '../ui'
 import { PayToggle } from './Matches'
+
+/** Nợ từ mức này trở lên mới tô đỏ; nợ nhỏ (vài trận tiền nước) để màu vàng cho đỡ báo động */
+const BIG_DEBT = 100000
 
 interface Stat {
   played: number
@@ -111,47 +115,43 @@ export default function Members() {
       )}
 
       <Card
-        title={
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span>Danh sách thành viên</span>
-            <span className="text-xs font-normal text-slate-500">
-              ({activeMembers.length} đang đá · {gkCount} thủ môn 🧤 {inactiveMembers.length > 0 && `· ${inactiveMembers.length} tạm nghỉ`})
-            </span>
-          </div>
-        }
+        title="Danh sách thành viên"
+        subtitle={`${activeMembers.length} đang đá · ${gkCount} thủ môn${inactiveMembers.length > 0 ? ` · ${inactiveMembers.length} tạm nghỉ` : ''}`}
         right={
-          <div className="flex items-center gap-2">
+          <>
             <Btn kind="soft" onClick={handleBulkAdd} className="px-2.5 py-1.5 text-xs">
-              📋 Thêm nhiều người
+              <Icon name="list" className="h-3.5 w-3.5" /> Thêm nhiều
             </Btn>
-            <Btn onClick={handleAddNew} className="px-3 py-1.5 text-xs">
-              + Thêm thành viên
+            <Btn onClick={handleAddNew} className="px-2.5 py-1.5 text-xs">
+              <Icon name="plus" className="h-3.5 w-3.5" strokeWidth={2.4} /> Thêm người
             </Btn>
-          </div>
+          </>
         }
       >
         {/* Search & Filter Bar */}
         {data.members.length > 0 && (
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div className="relative flex-1 sm:max-w-xs">
+              <Icon name="search" className="pointer-events-none absolute top-1/2 left-3 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="🔍 Tìm tên thành viên..."
+                placeholder="Tìm tên thành viên..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                className={inputCls}
+                className={`${inputCls} pl-9`}
               />
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-sm text-slate-400 hover:text-slate-600"
+                  className="absolute top-1/2 right-2 grid h-6 w-6 -translate-y-1/2 cursor-pointer place-items-center rounded-full text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+                  aria-label="Xoá tìm kiếm"
                 >
-                  ✕
+                  <Icon name="x" className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex flex-wrap gap-1 text-xs">
+            <div className="-mx-1 flex gap-1 overflow-x-auto px-1 text-xs [scrollbar-width:none]">
               {[
                 { id: 'active', label: `Đang đá (${activeMembers.length})` },
                 { id: 'debt', label: `Còn nợ (${activeMembers.filter((m) => debt.get(m.id)).length})` },
@@ -161,7 +161,7 @@ export default function Members() {
                 <button
                   key={tab.id}
                   onClick={() => setFilter(tab.id as typeof filter)}
-                  className={`rounded-full px-3 py-1 font-medium transition ${
+                  className={`shrink-0 cursor-pointer rounded-full px-3 py-1.5 font-medium whitespace-nowrap transition ${
                     filter === tab.id
                       ? 'bg-green-700 text-white shadow-sm'
                       : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
@@ -190,7 +190,7 @@ export default function Members() {
         ) : !filteredList.length ? (
           <Empty>Không tìm thấy thành viên phù hợp với bộ lọc.</Empty>
         ) : (
-          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <ul className="grid gap-3 sm:grid-cols-2 2xl:grid-cols-3">
             {filteredList.map((m) => {
               const st = stats.get(m.id)
               const owe = debt.get(m.id) ?? 0
@@ -206,86 +206,78 @@ export default function Members() {
                         setEdit(m)
                       }
                     }}
-                    className={`flex h-full w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3.5 text-left transition hover:-translate-y-0.5 hover:border-green-200 hover:bg-white hover:shadow-md ${
-                      m.active ? '' : 'opacity-60 grayscale'
+                    className={`flex h-full w-full cursor-pointer items-start gap-3 rounded-2xl border border-slate-200/80 bg-white p-3.5 text-left transition hover:border-green-300 hover:shadow-md ${
+                      m.active ? '' : 'opacity-60'
                     }`}
                   >
-                    <div className="flex min-w-0 items-center gap-3">
-                      <span
-                        className={`grid h-11 w-11 shrink-0 place-items-center rounded-2xl text-base font-bold shadow-sm ${
-                          owe ? 'bg-red-100 text-red-700' : m.active ? 'bg-green-100 text-green-800' : 'bg-slate-200 text-slate-600'
-                        }`}
-                      >
-                        {m.name.trim().split(/\s+/).pop()?.[0]?.toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5 truncate font-bold text-slate-800">
-                          <span className="truncate">{m.name}</span>
-                          {m.isGK && <span title="Bắt gôn được">🧤</span>}
-                          {!m.active && (
-                            <span className="rounded bg-slate-200 px-1 py-0.2 text-[10px] font-normal text-slate-600">Nghỉ</span>
+                    <Avatar name={m.name} className="h-10 w-10 text-base" />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex min-w-0 items-center gap-1.5">
+                          <span className="truncate font-semibold text-slate-900">{m.name}</span>
+                          {m.isGK && (
+                            <span title="Bắt gôn được" className="shrink-0 rounded-md bg-violet-100 px-1 py-0.5 text-violet-700">
+                              <Icon name="glove" className="h-3.5 w-3.5" />
+                            </span>
                           )}
+                          {!m.active && <span className="shrink-0 rounded-md bg-slate-100 px-1.5 py-0.5 text-[10px] text-slate-600">Nghỉ</span>}
                         </div>
-                        <div className="mt-0.5 flex items-center gap-1 text-xs text-slate-500">
-                          <span className="text-amber-500 font-medium">{'★'.repeat(m.skill)}</span>
-                          <span>·</span>
-                          <span>{money(m.monthlyFee)}/th</span>
-                        </div>
-                        <div className="text-xs text-slate-500">
-                          {st ? `${st.played} trận (${st.won}T·${st.drawn}H·${st.lost}B)` : 'chưa đá trận nào'}
-                        </div>
-                        {(() => {
-                          const adv = getMemberAdvanceInfo(m, data.payments)
-                          if (!adv.total) return null
-                          return (
-                            <div className="mt-1 flex items-center gap-1">
-                              <span
-                                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${
-                                  adv.remaining > 0
-                                    ? 'bg-sky-50 text-sky-800 ring-sky-200'
-                                    : 'bg-amber-50 text-amber-800 ring-amber-200'
-                                }`}
-                                title={`Đã ứng: ${money(adv.total)} (ngày ${fmtDate(m.advanceDate || '')}) · Đã trừ ${adv.usedCount} trận (${money(adv.used)})`}
-                              >
-                                <span>💧</span>
-                                {adv.remaining > 0 ? (
-                                  <span>Ứng còn: {money(adv.remaining)}</span>
-                                ) : (
-                                  <span>Hết tiền ứng (0đ)</span>
-                                )}
-                              </span>
-                            </div>
-                          )
-                        })()}
+                        {owe ? (
+                          <span
+                            className={`shrink-0 rounded-md px-1.5 py-0.5 text-xs font-bold ${
+                              owe >= BIG_DEBT ? 'bg-red-50 text-red-600' : 'bg-amber-50 text-amber-700'
+                            }`}
+                          >
+                            −{money(owe)}
+                          </span>
+                        ) : (
+                          <span className="flex shrink-0 items-center gap-0.5 text-[11px] font-semibold text-green-700">
+                            <Icon name="check" className="h-3 w-3" strokeWidth={3} /> Đủ
+                          </span>
+                        )}
                       </div>
+                      <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+                        <span className="tracking-tight text-amber-500">
+                          {'★'.repeat(m.skill)}
+                          <span className="text-slate-200">{'★'.repeat(5 - m.skill)}</span>
+                        </span>
+                        <span>·</span>
+                        <span>{money(m.monthlyFee)}/tháng</span>
+                      </div>
+                      <div className="mt-0.5 text-xs text-slate-500">
+                        {st ? `${st.played} trận · ${st.won} thắng · ${st.drawn} hoà · ${st.lost} thua` : 'Chưa đá trận nào'}
+                      </div>
+                      {(() => {
+                        const adv = getMemberAdvanceInfo(m, data.payments)
+                        if (!adv.total) return null
+                        return (
+                          <div
+                            className={`mt-1.5 inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ${
+                              adv.remaining > 0 ? 'bg-sky-50 text-sky-800' : 'bg-slate-100 text-slate-500'
+                            }`}
+                            title={`Đã ứng: ${money(adv.total)} (ngày ${fmtDate(m.advanceDate || '')}) · Đã trừ ${adv.usedCount} trận (${money(adv.used)})`}
+                          >
+                            <Icon name="coins" className="h-3.5 w-3.5" />
+                            {adv.remaining > 0 ? `Ứng còn ${money(adv.remaining)}` : 'Hết tiền ứng'}
+                          </div>
+                        )
+                      })()}
                     </div>
 
-                    <div className="flex shrink-0 flex-col items-end gap-1.5">
-                      {owe ? (
-                        <span className="rounded-lg bg-red-50 px-2 py-0.5 text-xs font-bold text-red-600 ring-1 ring-red-200">
-                          Nợ {money(owe)}
-                        </span>
-                      ) : (
-                        <span className="rounded-full bg-green-100 px-2 py-0.5 text-[11px] font-medium text-green-800">
-                          Đủ
-                        </span>
-                      )}
-
-                      {/* Quick Delete button */}
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleDeleteQuick(m, e)
-                          }}
-                          title={`Xóa ${m.name}`}
-                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 sm:opacity-60 sm:group-hover:opacity-100 cursor-pointer text-sm"
-                        >
-                          🗑️
-                        </button>
-                      )}
-                    </div>
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleDeleteQuick(m, e)
+                        }}
+                        title={`Xóa ${m.name}`}
+                        aria-label={`Xóa ${m.name}`}
+                        className="-mr-1 shrink-0 cursor-pointer self-end rounded-lg p-1.5 text-slate-300 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100 sm:focus:opacity-100"
+                      >
+                        <Icon name="trash" className="h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                 </li>
               )

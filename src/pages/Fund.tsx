@@ -3,6 +3,7 @@ import { deleteMonth, setPaid } from '../actions'
 import { fmtDate, fmtMonth, fundSummary, money, newId, obligationId, todayISO } from '../logic'
 import { store } from '../store'
 import { FUND_NAMES, type Expense, type FundId, type FundMonth, type Income } from '../types'
+import { Icon } from '../icons'
 import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, name, useApp } from '../ui'
 import { PayToggle } from './Matches'
 
@@ -20,7 +21,7 @@ export default function Fund() {
     <div className="space-y-6">
       <div className="grid gap-4 sm:grid-cols-2 lg:gap-6">
         {(['main', 'extra'] as const).map((f) => (
-          <Card key={f} title={FUND_NAMES[f]} right={<span className="grid h-10 w-10 place-items-center rounded-2xl bg-green-50 text-xl">{f === 'main' ? '💰' : '💧'}</span>}>
+          <Card key={f} title={FUND_NAMES[f]} right={<span className="grid h-9 w-9 place-items-center rounded-xl bg-green-50 text-green-700"><Icon name={f === 'main' ? 'wallet' : 'drop'} className="h-5 w-5" /></span>}>
             <div className={`text-3xl font-extrabold tracking-tight ${fund[f].balance < 0 ? 'text-red-600' : 'text-green-700'}`}>{money(fund[f].balance)}</div>
             <div className="mt-1 space-y-0.5 text-xs text-slate-600">
               <div>

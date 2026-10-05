@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import LineupImageModal from '../LineupImageModal'
 import { type LineupImageParams } from '../lineupImage'
 import { fmtDate, matchOutcome, money, newId, splitTeams, todayISO } from '../logic'
 import { saveMatch } from '../actions'
 import type { Match } from '../types'
+import { Icon } from '../icons'
 import { Btn, Card, Empty, Field, Modal, copyText, inputCls, name, useApp } from '../ui'
 
 export default function Split({ go, editMatchId }: { go: (tab: string, id?: string) => void; editMatchId?: string | null }) {
@@ -110,7 +111,12 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
     toast(`Đã xoá ${name(ctx, id)} khỏi đội hình.`)
   }
 
-  const doSplit = () => setTeams(splitTeams(selectableMembers.filter((m) => picked.has(m.id))))
+  const resultRef = useRef<HTMLDivElement>(null)
+  const doSplit = () => {
+    setTeams(splitTeams(selectableMembers.filter((m) => picked.has(m.id))))
+    // Màn hẹp: kết quả nằm dưới danh sách → tự cuộn xuống cho thấy ngay
+    if (window.innerWidth < 1280) requestAnimationFrame(() => resultRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }))
+  }
 
   const move = (id: string) =>
     setTeams((t) =>
@@ -245,66 +251,36 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
         </div>
       )}
 
-      {/* Thanh tác vụ nhanh: Xem lại ngày cũ */}
-      <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
-        <div className="flex items-center gap-2 text-sm text-slate-700">
-          <span className="grid h-9 w-9 place-items-center rounded-2xl bg-green-100 text-lg text-green-800">📅</span>
-          <div>
-            <div className="font-bold text-slate-800">Lịch sử chia đội các ngày cũ</div>
-            <div className="text-xs text-slate-500">
-              Đã lưu {matchesWithLineup.length} ngày đá · Xem lại, sửa đội hình hoặc tái sử dụng người đi đá
-            </div>
-          </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          {matchesWithLineup.slice(0, 3).map((m) => (
-            <button
-              key={m.id}
-              onClick={() => setViewMatch(m)}
-              className="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 shadow-sm transition hover:border-green-300 hover:bg-green-50/60"
-            >
-              {fmtDate(m.date)} ({m.teamA.length + m.teamB.length} người) ↗
-            </button>
-          ))}
-          {matchesWithLineup.length > 0 && (
-            <Btn kind="soft" onClick={() => setShowHistoryModal(true)} className="px-3 py-1.5 text-xs">
-              Xem tất cả ({matchesWithLineup.length}) →
-            </Btn>
-          )}
-        </div>
-      </div>
-
       {/* Trận sắp tới nếu có */}
       {upcoming.length > 0 && (
-        <Card title="⚽ Đội hình trận sắp tới (chưa nhập tỉ số)">
+        <Card title="Trận sắp tới" subtitle="Đã chia đội, chưa nhập tỉ số">
           <div className="grid gap-4 sm:grid-cols-2">
             {upcoming.map((m) => (
               <div
                 key={m.id}
                 onClick={() => setViewMatch(m)}
-                className="cursor-pointer rounded-2xl border border-green-100 bg-green-50/40 p-4 transition hover:bg-green-50 hover:shadow-sm"
+                className="cursor-pointer rounded-2xl border border-slate-200/80 bg-white p-4 transition hover:border-green-300 hover:shadow-md"
               >
                 <div className="flex items-center justify-between text-xs font-medium text-slate-500">
-                  <span className="font-bold text-green-800">Ngày {fmtDate(m.date)}</span>
+                  <span className="font-bold text-slate-700">{fmtDate(m.date)}</span>
                   <span className="rounded-full bg-amber-100 px-2 py-0.5 text-amber-800">Chưa đá</span>
                 </div>
                 <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
-                  <div className="rounded-xl bg-white p-2.5 shadow-xs ring-1 ring-sky-200">
-                    <div className="font-bold text-sky-800">🟦 Đội A ({m.teamA.length})</div>
+                  <div className="rounded-xl border-l-4 border-sky-500 bg-sky-50/60 p-2.5">
+                    <div className="font-bold text-sky-800">Đội A · {m.teamA.length}</div>
                     <div className="mt-1 line-clamp-2 text-slate-600">
                       {m.teamA.map((id) => name(ctx, id)).join(', ')}
                     </div>
                   </div>
-                  <div className="rounded-xl bg-white p-2.5 shadow-xs ring-1 ring-orange-200">
-                    <div className="font-bold text-orange-800">🟧 Đội B ({m.teamB.length})</div>
+                  <div className="rounded-xl border-l-4 border-orange-500 bg-orange-50/60 p-2.5">
+                    <div className="font-bold text-orange-800">Đội B · {m.teamB.length}</div>
                     <div className="mt-1 line-clamp-2 text-slate-600">
                       {m.teamB.map((id) => name(ctx, id)).join(', ')}
                     </div>
                   </div>
                 </div>
                 <div className="mt-2 text-right text-xs font-semibold text-green-700">
-                  Bấm xem chi tiết & sửa đội hình →
+                  Xem chi tiết & sửa đội hình ›
                 </div>
               </div>
             ))}
@@ -315,10 +291,11 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       {/* Khu vực tạo và sắp xếp đội hình mới */}
       <div className={`grid items-start gap-6 ${teams ? 'xl:grid-cols-2' : ''}`}>
         <Card
-          title={editMatch ? `1. Danh sách đi đá trận ngày ${fmtDate(date)}` : '1. Ai đi đá hôm nay?'}
+          title={editMatch ? `Danh sách đi đá ngày ${fmtDate(date)}` : 'Ai đi đá hôm nay?'}
+          subtitle="Bước 1 · Bấm chọn người có mặt"
           right={
-            <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-semibold text-green-800">
-              Đã chọn: {picked.size} người
+            <span className="rounded-full bg-green-50 px-2.5 py-1 text-xs font-bold text-green-800 ring-1 ring-green-200 ring-inset">
+              {picked.size} người
             </span>
           }
         >
@@ -329,15 +306,15 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               </Field>
             </div>
             <div className="flex flex-wrap gap-1">
-              <Btn kind="ghost" onClick={() => setPicked(new Set(selectableMembers.map((m) => m.id)))} className="text-xs">
+              <Btn kind="ghost" onClick={() => setPicked(new Set(selectableMembers.map((m) => m.id)))} className="px-2.5 text-xs">
                 Chọn hết ({selectableMembers.length})
               </Btn>
-              <Btn kind="ghost" onClick={() => setPicked(new Set())} className="text-xs">
+              <Btn kind="ghost" onClick={() => setPicked(new Set())} className="px-2.5 text-xs">
                 Bỏ chọn
               </Btn>
               {matchesWithLineup.length > 0 && (
-                <Btn kind="soft" onClick={() => setShowHistoryModal(true)} className="text-xs">
-                  📅 Lấy theo ngày cũ...
+                <Btn kind="soft" onClick={() => setShowHistoryModal(true)} className="px-2.5 text-xs">
+                  <Icon name="calendar" className="h-3.5 w-3.5" /> Lấy theo ngày cũ
                 </Btn>
               )}
             </div>
@@ -354,31 +331,39 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                 <button
                   key={m.id}
                   onClick={() => toggle(m.id)}
-                  className={`flex flex-col justify-between rounded-xl px-3 py-2 text-left text-sm ring-1 transition ${
-                    on ? 'bg-green-700 text-white ring-green-700 shadow-sm' : 'bg-white ring-slate-200 hover:ring-green-400'
+                  aria-pressed={on}
+                  className={`flex min-w-0 cursor-pointer items-center gap-2 rounded-xl px-2.5 py-2 text-left text-sm ring-1 transition active:scale-[0.98] ${
+                    on ? 'bg-green-50 ring-2 ring-green-600' : 'bg-white ring-slate-200 hover:ring-green-400'
                   }`}
                 >
-                  <div className="truncate font-semibold">
-                    {m.name} {m.isGK && '🧤'}
-                  </div>
-                  <div className={`mt-0.5 text-xs ${on ? 'text-green-100' : 'text-slate-400'}`}>
-                    {'★'.repeat(m.skill)}
-                  </div>
+                  <span
+                    className={`grid h-5 w-5 shrink-0 place-items-center rounded-md border transition ${
+                      on ? 'border-green-600 bg-green-600 text-white' : 'border-slate-300 bg-white text-transparent'
+                    }`}
+                  >
+                    <Icon name="check" className="h-3.5 w-3.5" strokeWidth={3} />
+                  </span>
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1 font-semibold text-slate-800">
+                      <span className="truncate">{m.name}</span>
+                      {m.isGK && <Icon name="glove" className="h-3.5 w-3.5 shrink-0 text-violet-600" />}
+                    </span>
+                    <span className="block text-[11px] leading-tight tracking-tight text-amber-500">
+                      {'★'.repeat(m.skill)}
+                      <span className="text-slate-200">{'★'.repeat(5 - m.skill)}</span>
+                    </span>
+                  </span>
                 </button>
               )
             })}
           </div>
 
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-xs text-slate-500">
-              * Thuật toán sẽ tự động cân bằng số sao và rải đều thủ môn 🧤 cho 2 đội.
-            </div>
-            <Btn
-              disabled={picked.size < 2}
-              onClick={doSplit}
-              className="w-full py-2.5 sm:w-auto"
-            >
-              🎲 Chia đội ngẫu nhiên cân bằng ({picked.size} người)
+          <p className="mt-3 text-xs text-slate-500">Máy tự cân bằng tổng số sao và rải đều thủ môn cho 2 đội.</p>
+          {/* Nút chính dính đáy màn hình — chọn người xong bấm luôn, không phải cuộn */}
+          <div className="sticky bottom-[calc(4.5rem+env(safe-area-inset-bottom))] z-20 -mx-4 mt-3 border-t border-slate-100 bg-white/95 px-4 py-3 backdrop-blur sm:-mx-5 sm:px-5 lg:bottom-0 lg:rounded-b-2xl">
+            <Btn disabled={picked.size < 2} onClick={doSplit} className="w-full py-3 text-[15px]">
+              <Icon name="shuffle" className="h-4.5 w-4.5" />
+              {picked.size < 2 ? 'Chọn ít nhất 2 người' : `Chia đội cân bằng · ${picked.size} người`}
             </Btn>
           </div>
         </Card>
@@ -386,29 +371,26 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
         {/* Kết quả sắp xếp đội hình */}
         {teams && (
           <Card
-            title={editMatch ? '2. Đội hình trận đấu (Bấm tên để đổi đội)' : '2. Kết quả chia đội'}
+            title={editMatch ? 'Đội hình trận đấu' : 'Kết quả chia đội'}
+            subtitle="Bước 2 · Bấm tên để chuyển sang đội kia"
             right={
-              <Btn kind="ghost" onClick={doSplit} className="text-xs">
-                🔄 Chia lại
+              <Btn kind="soft" onClick={doSplit} className="px-2.5 py-1.5 text-xs">
+                <Icon name="shuffle" className="h-3.5 w-3.5" /> Chia lại
               </Btn>
             }
           >
-            <p className="mb-3 text-xs text-slate-500">
-              💡 Bấm vào tên cầu thủ bên dưới để chuyển người đó sang đội đối phương.
-            </p>
+            <div ref={resultRef} className="scroll-mt-48" />
             <div className="grid grid-cols-2 gap-3">
               {(['teamA', 'teamB'] as const).map((k) => (
                 <div
                   key={k}
-                  className={`rounded-2xl p-3.5 shadow-xs ${
-                    k === 'teamA' ? 'bg-sky-50 ring-1 ring-sky-200' : 'bg-orange-50 ring-1 ring-orange-200'
+                  className={`min-w-0 rounded-2xl border-t-4 p-2.5 sm:p-3 ${
+                    k === 'teamA' ? 'border-sky-500 bg-sky-50/70' : 'border-orange-500 bg-orange-50/70'
                   }`}
                 >
-                  <div className="mb-3 flex items-baseline justify-between border-b border-black/5 pb-2 text-sm font-bold">
-                    <span className={k === 'teamA' ? 'text-sky-900' : 'text-orange-900'}>
-                      {k === 'teamA' ? '🟦 Đội A' : '🟧 Đội B'}
-                    </span>
-                    <span className="text-xs font-semibold text-slate-500">
+                  <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-2 px-0.5 text-sm font-bold">
+                    <span className={k === 'teamA' ? 'text-sky-900' : 'text-orange-900'}>{k === 'teamA' ? 'Đội A' : 'Đội B'}</span>
+                    <span className="text-[11px] font-semibold text-slate-500">
                       {teams[k].length} người · {skill(teams[k])}★
                     </span>
                   </div>
@@ -419,22 +401,22 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                           type="button"
                           onClick={() => move(id)}
                           title="Bấm để đổi sang đội kia"
-                          className="flex flex-1 items-center justify-between rounded-xl bg-white px-2.5 py-2 text-left text-sm font-medium shadow-xs ring-1 ring-black/5 transition hover:scale-[1.01] hover:ring-green-400 cursor-pointer"
+                          className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-lg bg-white px-2 py-1.5 text-left text-[13px] font-medium ring-1 ring-black/5 transition hover:ring-green-400"
                         >
                           <span className="truncate">{name(ctx, id)}</span>
-                          <span className="flex items-center gap-1 text-xs text-slate-400">
-                            {ctx.memberById.get(id)?.isGK && '🧤'}
-                            <span>{'★'.repeat(ctx.memberById.get(id)?.skill ?? 3)}</span>
-                            <span className="text-[10px] text-slate-300">⇄</span>
+                          <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-amber-500">
+                            {ctx.memberById.get(id)?.isGK && <Icon name="glove" className="h-3.5 w-3.5 text-violet-600" />}
+                            {ctx.memberById.get(id)?.skill ?? 3}★
                           </span>
                         </button>
                         <button
                           type="button"
                           onClick={() => removePlayerFromTeams(id)}
                           title={`Xoá ${name(ctx, id)} khỏi trận này`}
-                          className="rounded-xl p-2 text-slate-300 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+                          aria-label={`Xoá ${name(ctx, id)} khỏi trận này`}
+                          className="hidden shrink-0 cursor-pointer rounded-lg p-1 text-slate-300 transition hover:bg-red-50 hover:text-red-600 sm:block"
                         >
-                          ✕
+                          <Icon name="x" className="h-3.5 w-3.5" />
                         </button>
                       </li>
                     ))}
@@ -445,7 +427,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
 
             <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <Btn kind="soft" onClick={() => copyLineup(teams)}>
-                📋 Sao chép text Zalo
+                <Icon name="copy" className="h-4 w-4" /> Chép chữ Zalo
               </Btn>
               <Btn
                 kind="soft"
@@ -474,17 +456,43 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                     chargedMemberIds,
                   })
                 }}
-                className="bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100"
               >
-                📸 Xuất ảnh đội hình
+                <Icon name="image" className="h-4 w-4" /> Xuất ảnh
               </Btn>
-              <Btn onClick={save} disabled={!teams.teamA.length || !teams.teamB.length} className="col-span-2 sm:col-span-1">
-                {editMatch ? '💾 Lưu cập nhật đội hình' : '💾 Lưu trận vào sổ'}
+              <Btn onClick={save} disabled={!teams.teamA.length || !teams.teamB.length} className="col-span-2 py-2.5 sm:col-span-1">
+                <Icon name="check" className="h-4 w-4" strokeWidth={2.4} />
+                {editMatch ? 'Lưu đội hình' : 'Lưu trận vào sổ'}
               </Btn>
             </div>
           </Card>
         )}
       </div>
+
+      {/* Lịch sử: xem lại / tái dùng danh sách ngày cũ */}
+      {matchesWithLineup.length > 0 && (
+        <Card
+          title="Các ngày đã chia đội"
+          subtitle={`${matchesWithLineup.length} ngày · bấm để xem lại, sửa hoặc lấy lại danh sách người`}
+          right={
+            <Btn kind="ghost" onClick={() => setShowHistoryModal(true)} className="px-2 py-1 text-xs">
+              Xem tất cả <Icon name="chevron" className="h-3.5 w-3.5" />
+            </Btn>
+          }
+        >
+          <div className="flex flex-wrap gap-2">
+            {matchesWithLineup.slice(0, 4).map((m) => (
+              <button
+                key={m.id}
+                onClick={() => setViewMatch(m)}
+                className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-green-300 hover:bg-green-50/60"
+              >
+                <Icon name="calendar" className="h-3.5 w-3.5 text-slate-400" />
+                {fmtDate(m.date)} <span className="font-normal text-slate-400">· {m.teamA.length + m.teamB.length} người</span>
+              </button>
+            ))}
+          </div>
+        </Card>
+      )}
 
       {/* Modal xem chi tiết một trận cũ / đội hình ngày cũ */}
       {viewMatch && (

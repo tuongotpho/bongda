@@ -188,6 +188,10 @@ function MatchModal({
   const [penaltyWinner, setPenaltyWinner] = useState<'A' | 'B' | null>(m.penaltyWinner ?? null)
   const [penaltyScoreA, setPenaltyScoreA] = useState(m.penaltyScoreA?.toString() ?? '')
   const [penaltyScoreB, setPenaltyScoreB] = useState(m.penaltyScoreB?.toString() ?? '')
+  const hasResult = (m.scoreA != null && m.scoreB != null) || !!m.charges
+  const [view, setView] = useState<'lineup' | 'result'>(hasResult ? 'result' : 'lineup')
+  // Chỉ đổi thẻ khi chuyển sang trận khác (không reset mỗi lần lưu dữ liệu)
+  useEffect(() => setView(hasResult ? 'result' : 'lineup'), [m.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setScoreA(m.scoreA?.toString() ?? '')
@@ -290,7 +294,7 @@ function MatchModal({
       const advMsg = deducted.length > 0 ? ` · Đã trừ tiền ứng cho: ${deductedNames} 💧` : ''
 
       if (isTied && pWinner) {
-        toast(`Đã lưu kết quả: ${a} – ${b} (Đội ${pWinner} thắng Pen ⚽)${advMsg}`)
+        toast(`Đã lưu kết quả: ${a} – ${b} (Đội ${pWinner} thắng luân lưu)${advMsg}`)
       } else {
         toast(`Đã lưu kết quả: ${a} – ${b}${advMsg}`)
       }
@@ -445,7 +449,7 @@ function MatchModal({
         {/* Thanh chọn trận khác */}
         {allMatches.length > 1 && (
           <div className="flex items-center gap-2 rounded-2xl bg-slate-50 p-2.5 text-xs text-slate-600">
-            <span className="font-semibold">Xem trận khác:</span>
+            <span className="hidden font-semibold sm:inline">Xem trận khác:</span>
             <select
               value={m.id}
               onChange={(e) => {
@@ -464,41 +468,59 @@ function MatchModal({
           </div>
         )}
 
+        {/* Hai thẻ con: tách đội hình và phần tiền cho đỡ rối */}
+        <div className="grid grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 text-sm font-semibold">
+          {([
+            ['lineup', 'Đội hình'],
+            ['result', unpaidCount > 0 ? `Kết quả & tiền · ${unpaidCount}` : 'Kết quả & tiền'],
+          ] as const).map(([k, label]) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => setView(k)}
+              aria-pressed={view === k}
+              className={`cursor-pointer rounded-lg px-2 py-2 transition ${view === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'lineup' && (
+          <>
         {/* 1. HIỂN THỊ ĐỘI HÌNH 2 ĐỘI TRỰC QUAN */}
         {!m.charges ? (
           <div>
             <div className="mb-2 flex items-center justify-between text-xs font-bold text-slate-700">
-              <span>ĐỘI HÌNH 2 ĐỘI ĐÃ CHIA:</span>
+              <span>Đội hình 2 đội</span>
               <span className="font-normal text-slate-500">
                 {m.teamA.length + m.teamB.length} cầu thủ tham gia
               </span>
             </div>
 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
-              <span className="flex items-center gap-1.5 font-medium">
-                <span>💡</span> Bấm vào tên cầu thủ bên dưới để chuyển đội
-              </span>
+              <span className="font-medium">Bấm tên cầu thủ để chuyển sang đội kia</span>
               <div className="flex flex-wrap items-center gap-1.5">
                 <button
                   type="button"
                   onClick={reSplit}
                   className="rounded-xl border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-800 shadow-xs hover:bg-sky-50 transition cursor-pointer"
                 >
-                  🔄 Chia lại 2 đội
+                  Chia lại 2 đội
                 </button>
                 <button
                   type="button"
                   onClick={openLineupImage}
                   className="rounded-xl border border-sky-300 bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 shadow-xs hover:bg-sky-100 transition cursor-pointer"
                 >
-                  📸 Xuất ảnh Zalo
+                  Xuất ảnh Zalo
                 </button>
                 <button
                   type="button"
                   onClick={onEdit}
                   className="rounded-xl border border-green-300 bg-green-700 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-green-800 transition cursor-pointer"
                 >
-                  ✏️ Sửa danh sách / Đổi ngày
+                  Sửa danh sách / ngày
                 </button>
               </div>
             </div>
@@ -510,7 +532,7 @@ function MatchModal({
                 return (
                   <div
                     key={k}
-                    className={`rounded-2xl p-3.5 shadow-xs transition ${
+                    className={`min-w-0 rounded-2xl p-2.5 transition sm:p-3 ${
                       k === 'A'
                         ? isWinner
                           ? 'bg-sky-100/80 ring-2 ring-sky-400'
@@ -520,31 +542,30 @@ function MatchModal({
                           : 'bg-orange-50 ring-1 ring-orange-200'
                     }`}
                   >
-                    <div className="mb-2 flex items-baseline justify-between border-b border-black/5 pb-2 font-bold">
+                    <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 border-b border-black/5 pb-2 font-bold">
                       <span className={k === 'A' ? 'text-sky-900' : 'text-orange-900'}>
-                        {k === 'A' ? '🟦 Đội A' : '🟧 Đội B'} {isWinner && '🏆'}
+                        {k === 'A' ? 'Đội A' : 'Đội B'} {isWinner && <span className="ml-1 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px]">Thắng</span>}
                       </span>
                       <span className="text-xs font-semibold text-slate-500">
                         {list.length} người · {skill(list)}★
                       </span>
                     </div>
 
-                    <ul className="space-y-1.5 text-xs">
+                    <ul className="space-y-1">
                       {list.map((id) => {
                         const mem = ctx.memberById.get(id)
                         return (
-                          <li key={id} className="flex items-center gap-1">
+                          <li key={id} className="flex min-w-0 items-center gap-0.5">
                             <button
                               type="button"
                               onClick={() => movePlayer(id)}
                               title="Bấm để đổi sang đội kia"
-                              className="flex flex-1 items-center justify-between rounded-xl bg-white/90 px-2.5 py-1.5 text-left text-xs font-medium shadow-xs ring-1 ring-black/5 transition hover:scale-[1.01] hover:ring-green-400 cursor-pointer"
+                              className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-lg bg-white px-2 py-1.5 text-left text-[13px] font-medium ring-1 ring-black/5 transition hover:ring-green-400"
                             >
                               <span className="truncate">{name(ctx, id)}</span>
-                              <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400">
-                                {mem?.isGK && <span title="Thủ môn">🧤</span>}
-                                <span>{'★'.repeat(mem?.skill ?? 3)}</span>
-                                <span className="text-[10px] text-slate-300">⇄</span>
+                              <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
+                                {mem?.isGK && <Icon name="glove" className="h-3.5 w-3.5 text-violet-600" />}
+                                <span className="text-amber-500">{mem?.skill ?? 3}★</span>
                               </span>
                             </button>
                             {canEdit && (
@@ -552,9 +573,10 @@ function MatchModal({
                                 type="button"
                                 onClick={() => removePlayerFromMatch(id)}
                                 title={`Xoá ${name(ctx, id)} khỏi trận`}
-                                className="rounded-xl p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+                                aria-label={`Xoá ${name(ctx, id)} khỏi trận`}
+                                className="shrink-0 cursor-pointer rounded-lg p-1 text-slate-300 transition hover:bg-red-50 hover:text-red-600"
                               >
-                                ✕
+                                <Icon name="x" className="h-3.5 w-3.5" />
                               </button>
                             )}
                           </li>
@@ -590,12 +612,17 @@ function MatchModal({
           </div>
         )}
 
+          </>
+        )}
+
+        {view === 'result' && (
+          <>
         {/* 2. CHỌN NHANH KẾT QUẢ THẮNG / THUA ĐỂ TÍNH TIỀN NƯỚC */}
         {!m.charges && (
           <div className="rounded-2xl border border-slate-200 bg-slate-50/80 p-4">
             <div className="mb-2.5 flex items-center justify-between">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
-                ⚡ Chọn nhanh kết quả:
+                Kết quả trận
               </span>
               {o !== 'pending' && (
                 <button
@@ -619,7 +646,7 @@ function MatchModal({
                       : 'bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-50'
                   }`}
                 >
-                  🏆 Đội A thắng
+                  Đội A thắng
                   <span className="block text-[10px] font-normal opacity-80">Đội B nộp phạt</span>
                 </button>
 
@@ -632,7 +659,7 @@ function MatchModal({
                       : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
                   }`}
                 >
-                  🤝 Hoà trận
+                  Hoà
                   <span className="block text-[10px] font-normal opacity-80">
                     {isPenaltyDecided(m) ? `Đội ${o} thắng Pen` : 'Theo luật đã đặt'}
                   </span>
@@ -647,19 +674,19 @@ function MatchModal({
                       : 'bg-white text-orange-800 ring-1 ring-orange-200 hover:bg-orange-50'
                   }`}
                 >
-                  🏆 Đội B thắng
+                  Đội B thắng
                   <span className="block text-[10px] font-normal opacity-80">Đội A nộp phạt</span>
                 </button>
               </div>
             ) : (
               <div className="text-center text-lg font-bold">
                 {o === 'pending'
-                  ? '⏳ Trận đấu chưa nhập kết quả'
+                  ? 'Trận đấu chưa nhập kết quả'
                   : isPenaltyDecided(m)
                     ? `🏆 Hoà ${m.scoreA}–${m.scoreB} · Đội ${o} thắng Pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
                     : o === 'draw'
-                      ? '🤝 Kết quả: Hoà'
-                      : `🏆 Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
+                      ? 'Kết quả: Hoà'
+                      : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
               </div>
             )}
 
@@ -671,11 +698,11 @@ function MatchModal({
                 <div className="mt-3 rounded-2xl border border-emerald-300 bg-emerald-50/70 p-3 shadow-xs">
                   <div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-950">
                     <span className="flex items-center gap-1.5">
-                      <span>⚽</span> Hòa tỉ số — Có đá luân lưu Penalty không?
+                      Hoà — có đá luân lưu không?
                     </span>
                     {penaltyWinner ? (
                       <span className="rounded-full bg-emerald-700 px-2 py-0.5 text-[11px] font-bold text-white">
-                        Đội {penaltyWinner} thắng Pen ⚽
+                        Đội {penaltyWinner} thắng pen
                       </span>
                     ) : (
                       <span className="text-[11px] font-normal text-slate-500">
@@ -694,7 +721,7 @@ function MatchModal({
                           : 'bg-white text-sky-800 ring-1 ring-sky-200 hover:bg-sky-50'
                       }`}
                     >
-                      🟦 Đội A thắng Pen
+                      Đội A thắng pen
                       <span className="block text-[10px] font-normal opacity-85">Đội B nộp phạt</span>
                     </button>
 
@@ -707,7 +734,7 @@ function MatchModal({
                           : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
                       }`}
                     >
-                      ✕ Không đá Pen
+                      Không đá pen
                       <span className="block text-[10px] font-normal opacity-85">Hòa theo luật</span>
                     </button>
 
@@ -720,7 +747,7 @@ function MatchModal({
                           : 'bg-white text-orange-800 ring-1 ring-orange-200 hover:bg-orange-50'
                       }`}
                     >
-                      🟧 Đội B thắng Pen
+                      Đội B thắng pen
                       <span className="block text-[10px] font-normal opacity-85">Đội A nộp phạt</span>
                     </button>
                   </div>
@@ -770,7 +797,7 @@ function MatchModal({
             {canEdit && (
               <div className="mt-3 border-t border-slate-200/60 pt-3">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
-                  <Field label="🟦 Bàn Đội A">
+                  <Field label="Bàn Đội A">
                     <input
                       inputMode="numeric"
                       value={scoreA}
@@ -780,7 +807,7 @@ function MatchModal({
                     />
                   </Field>
                   <span className="pb-2 text-lg font-bold text-slate-400">–</span>
-                  <Field label="🟧 Bàn Đội B">
+                  <Field label="Bàn Đội B">
                     <input
                       inputMode="numeric"
                       value={scoreB}
@@ -801,7 +828,7 @@ function MatchModal({
                     />
                   </div>
                   <Btn onClick={handleManualSave} className="shrink-0 px-3 py-2 text-xs">
-                    💾 Lưu tỉ số
+                    Lưu tỉ số
                   </Btn>
                 </div>
               </div>
@@ -814,7 +841,7 @@ function MatchModal({
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h4 className="font-bold text-slate-800">
-                💰 Tiền phạt thua{' '}
+                Tiền phạt thua{' '}
                 {!m.charges && (
                   <span className="text-xs font-normal text-slate-500">
                     ({money(m.waterFee)} / người đội thua)
@@ -824,14 +851,14 @@ function MatchModal({
             </div>
 
             {canEdit && obs.length > 0 && (
-              <div className="flex items-center gap-1.5">
+              <div className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
                 {unpaidCount > 0 ? (
                   <button
                     type="button"
                     onClick={() => markAllPaid(true)}
                     className="rounded-xl bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-800 ring-1 ring-green-300 hover:bg-green-100"
                   >
-                    ✓ Đã thu đủ cả đội ({unpaidCount})
+                    Thu đủ cả đội ({unpaidCount})
                   </button>
                 ) : (
                   <button
@@ -848,7 +875,7 @@ function MatchModal({
                   className="rounded-xl bg-slate-100 px-2 py-1 text-xs font-medium text-slate-600 hover:bg-slate-200"
                   title="Sao chép tin nhắn nhắc đóng"
                 >
-                  📋 Nhắc nợ
+                  Chép tin nhắc
                 </button>
                 <button
                   type="button"
@@ -856,7 +883,7 @@ function MatchModal({
                   className="rounded-xl bg-sky-50 px-2.5 py-1 text-xs font-semibold text-sky-800 ring-1 ring-sky-300 hover:bg-sky-100"
                   title="Xuất ảnh danh sách đóng tiền để gửi Zalo"
                 >
-                  📸 Xuất ảnh nộp tiền
+                  Xuất ảnh
                 </button>
               </div>
             )}
@@ -864,7 +891,7 @@ function MatchModal({
 
           {o === 'pending' && !m.charges ? (
             <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-              <span className="text-xl">👉</span> Bấm chọn đội thắng ở trên để hệ thống tự động lọc danh sách người đội thua cần nộp phạt.
+              Bấm chọn đội thắng ở trên để hệ thống tự động lọc danh sách người đội thua cần nộp phạt.
             </div>
           ) : !obs.length ? (
             <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm text-slate-600">
@@ -875,7 +902,7 @@ function MatchModal({
               <div className="mb-2 px-2 pt-1 text-xs text-slate-500 flex justify-between">
                 <span>{obs.length} người phải nộp phạt:</span>
                 <span className={unpaidCount ? 'text-red-600 font-bold' : 'text-green-700 font-bold'}>
-                  {unpaidCount ? `Còn ${unpaidCount} người chưa nộp` : '🎉 Đã thu đủ 100%'}
+                  {unpaidCount ? `Còn ${unpaidCount} người chưa nộp` : 'Đã thu đủ'}
                 </span>
               </div>
               <ul className="divide-y divide-slate-100 text-sm">
@@ -940,6 +967,9 @@ function MatchModal({
             </div>
           )}
         </div>
+
+          </>
+        )}
 
         {/* 4. NÚT XOÁ TRẬN */}
         {canEdit && (
