@@ -40,7 +40,7 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
       <Card title="Bắt đầu">
         <p className="text-sm text-slate-600">Chưa có thành viên nào. Thêm danh sách đội trước, sau đó chia đội và mở quỹ tháng.</p>
         <Btn className="mt-3" onClick={() => go('members')}>
-          👥 Đến tab Thành viên để thêm người
+          Đến tab Thành viên để thêm người
         </Btn>
       </Card>
     )
@@ -226,7 +226,7 @@ export function MessageBox({ text, onCopy }: { text: string; onCopy: (t: string)
     <div className="space-y-3">
       <textarea readOnly value={text} rows={Math.min(14, text.split('\n').length + 1)} className={`${inputCls} font-mono text-xs`} />
       <Btn className="w-full" onClick={() => onCopy(text)}>
-        📋 Sao chép để dán vào Zalo
+        <Icon name="copy" className="h-4 w-4" /> Sao chép để dán vào Zalo
       </Btn>
     </div>
   )

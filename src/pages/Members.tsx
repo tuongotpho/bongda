@@ -109,7 +109,7 @@ export default function Members() {
             onClick={() => login().catch((err) => toast('Đăng nhập lỗi: ' + (err?.code ?? err)))}
             className="rounded-xl bg-amber-800 px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:bg-amber-900"
           >
-            🔐 Đăng nhập Thủ quỹ ngay
+            Đăng nhập Thủ quỹ
           </button>
         </div>
       )}
@@ -177,14 +177,14 @@ export default function Members() {
         {/* Members Grid or Empty State */}
         {!data.members.length ? (
           <div className="py-12 text-center">
-            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-3xl">👥</div>
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-700"><Icon name="users" className="h-7 w-7" /></div>
             <h3 className="text-base font-bold text-slate-800">Chưa có thành viên nào trong đội</h3>
             <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
               Hãy thêm danh sách cầu thủ vào đội để bắt đầu chia đội cân bằng, ghi nhận trận đấu và theo dõi quỹ tháng.
             </p>
             <div className="mt-5 flex flex-wrap justify-center gap-3">
               <Btn onClick={handleAddNew}>+ Thêm thành viên đầu tiên</Btn>
-              <Btn kind="soft" onClick={handleBulkAdd}>📋 Dán danh sách cả đội</Btn>
+              <Btn kind="soft" onClick={handleBulkAdd}><Icon name="list" className="h-4 w-4" /> Dán danh sách cả đội</Btn>
             </div>
           </div>
         ) : !filteredList.length ? (
@@ -237,7 +237,7 @@ export default function Members() {
                         )}
                       </div>
                       <div className="mt-0.5 flex flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
-                        <span className="tracking-tight text-amber-500">
+                        <span className="tracking-tight text-amber-600">
                           {'★'.repeat(m.skill)}
                           <span className="text-slate-200">{'★'.repeat(5 - m.skill)}</span>
                         </span>
@@ -453,7 +453,7 @@ function MemberModal({
                   key={n}
                   type="button"
                   onClick={() => setSkill(n)}
-                  className={`text-2xl transition hover:scale-125 ${n <= skill ? 'text-amber-400' : 'text-slate-200'}`}
+                  className={`text-2xl transition hover:scale-125 ${n <= skill ? 'text-amber-500' : 'text-slate-300'}`}
                   aria-label={`${n} sao`}
                 >
                   ★
@@ -483,7 +483,7 @@ function MemberModal({
               className="h-4 w-4 rounded accent-green-700"
             />
             <div>
-              <span className="font-semibold text-slate-800">Biết bắt gôn 🧤</span>
+              <span className="font-semibold text-slate-800">Biết bắt gôn</span>
               <span className="block text-xs text-slate-500">Hệ thống sẽ tự động rải đều thủ môn cho hai bên khi chia đội</span>
             </div>
           </label>
@@ -492,7 +492,7 @@ function MemberModal({
           <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3.5 space-y-3">
             <div className="flex items-center justify-between">
               <span className="font-bold text-sky-950 text-xs sm:text-sm flex items-center gap-1.5">
-                <span>💧</span> Ứng trước tiền thua trận (tiền cọc nước)
+                <Icon name="coins" className="h-4 w-4" /> Ứng trước tiền thua trận
               </span>
               {advInfo && advInfo.total > 0 && (
                 <span
@@ -508,15 +508,15 @@ function MemberModal({
             {advInfo && advInfo.total > 0 && (
               <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-2.5 text-center shadow-2xs text-xs">
                 <div>
-                  <div className="text-[11px] text-slate-400">Đã ứng</div>
+                  <div className="text-[11px] text-slate-500">Đã ứng</div>
                   <div className="font-bold text-slate-800 mt-0.5">{money(advInfo.total)}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400">Đã trừ ({advInfo.usedCount} trận)</div>
+                  <div className="text-[11px] text-slate-500">Đã trừ ({advInfo.usedCount} trận)</div>
                   <div className="font-bold text-orange-600 mt-0.5">-{money(advInfo.used)}</div>
                 </div>
                 <div>
-                  <div className="text-[11px] text-slate-400">Còn lại</div>
+                  <div className="text-[11px] text-slate-500">Còn lại</div>
                   <div className="font-bold text-emerald-600 mt-0.5">{money(advInfo.remaining)}</div>
                 </div>
               </div>
@@ -566,7 +566,7 @@ function MemberModal({
                 <button
                   type="button"
                   onClick={() => setAdvanceAmount('')}
-                  className="rounded-lg px-2 py-0.5 text-slate-400 hover:text-red-500 transition cursor-pointer text-xs"
+                  className="rounded-lg px-2 py-0.5 text-slate-500 hover:text-red-600 transition cursor-pointer text-xs"
                 >
                   Xóa ứng
                 </button>
@@ -583,12 +583,12 @@ function MemberModal({
             </Field>
 
             <p className="text-[11px] text-sky-900/80 leading-relaxed">
-              💡 Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
+              Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
             </p>
           </div>
 
           <Btn className="w-full py-2.5" onClick={() => save()}>
-            {member ? '💾 Lưu thay đổi' : '➕ Thêm (Enter để thêm tiếp người sau)'}
+            {member ? 'Lưu thay đổi' : 'Thêm (Enter để thêm tiếp người sau)'}
           </Btn>
         </div>
 
@@ -617,7 +617,7 @@ function MemberModal({
                           <span>{o.label}</span>
                           {isAdv && (
                             <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
-                              💧 Trừ tiền ứng
+                              Trừ tiền ứng
                             </span>
                           )}
                         </div>
@@ -644,11 +644,11 @@ function MemberModal({
                 {member.active ? '⏸️ Cho tạm nghỉ (ẩn khỏi chia đội & quỹ mới)' : '▶️ Kích hoạt lại (đá tiếp)'}
               </Btn>
               <Btn kind="danger" className="border border-red-200 text-xs" onClick={del}>
-                🗑️ Xóa thành viên
+                <Icon name="trash" className="h-3.5 w-3.5" /> Xóa thành viên
               </Btn>
             </div>
             {hasHistory && (
-              <p className="mt-2 text-[11px] text-slate-400 text-center">
+              <p className="mt-2 text-[11px] text-slate-500 text-center">
                 * Khuyên dùng: Nếu người này chỉ nghỉ đá một thời gian, hãy chọn "Cho tạm nghỉ" để giữ lại lịch sử các trận cũ.
               </p>
             )}
@@ -714,7 +714,7 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
   }
 
   return (
-    <Modal title="📋 Thêm nhanh danh sách thành viên" onClose={onClose}>
+    <Modal title="Thêm nhanh danh sách thành viên" onClose={onClose}>
       <div className="space-y-4">
         <p className="text-xs text-slate-600">
           Dán danh sách tên cầu thủ từ Zalo hoặc Excel vào đây (mỗi dòng 1 tên). Thêm chữ <b>(GK)</b> hoặc <b>thủ môn</b> nếu người đó bắt gôn.
@@ -749,7 +749,7 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
               {parsed.map((p, idx) => (
                 <div key={idx} className="flex items-center justify-between py-1">
                   <span className={p.duplicate ? 'line-through text-slate-400' : 'font-medium text-slate-800'}>
-                    {p.name} {p.isGK && '🧤 (Thủ môn)'}
+                    {p.name} {p.isGK && '(thủ môn)'}
                   </span>
                   {p.duplicate && <span className="text-[10px] text-red-500 font-semibold">Trùng tên đã có</span>}
                 </div>
@@ -763,7 +763,7 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
             Hủy
           </Btn>
           <Btn className="flex-1" disabled={!validToAdd.length} onClick={handleAddAll}>
-            ➕ Thêm {validToAdd.length} thành viên
+            Thêm {validToAdd.length} thành viên
           </Btn>
         </div>
       </div>
@@ -796,9 +796,7 @@ function ConfirmDeleteModal({
     <Modal title={`Xác nhận xóa: ${member.name}`} onClose={onClose} zIndex="z-60">
       <div className="space-y-4">
         <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3.5">
-          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-2xl">
-            {member.isGK ? '🧤' : '👤'}
-          </span>
+          <Avatar name={member.name} className="h-12 w-12 text-lg" />
           <div>
             <div className="font-bold text-slate-800 text-base">{member.name}</div>
             <div className="text-xs text-slate-500">
@@ -814,7 +812,7 @@ function ConfirmDeleteModal({
         {hasHistory ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 space-y-2">
             <div className="font-bold flex items-center gap-1.5 text-sm">
-              <span>⚠️</span> Cầu thủ này đã có lịch sử trong đội
+              Cầu thủ này đã có lịch sử trong đội
             </div>
             <p className="leading-relaxed">
               Nếu bạn <b>XÓA HẲN</b>, tên cầu thủ này vẫn hiển thị là <i>(đã xoá)</i> trong các trận cũ để không làm lệch quỹ.<br />
@@ -857,7 +855,7 @@ function ConfirmDeleteModal({
                 setLoading(false)
               }}
             >
-              {loading ? 'Đang xóa...' : '🗑️ Vẫn xóa hẳn'}
+              {loading ? 'Đang xóa...' : 'Vẫn xóa hẳn'}
             </Btn>
           </div>
         </div>

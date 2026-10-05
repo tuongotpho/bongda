@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useState } from 'react'
-import LineupImageModal from '../LineupImageModal'
-import { type LineupImageParams } from '../lineupImage'
+import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
+import type { LineupImageParams } from '../lineupImage'
 import { deleteMatch, saveMatch, setPaid } from '../actions'
 import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
 import { Icon } from '../icons'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
+
+// Phần xuất ảnh chỉ tải khi bấm nút — app mở nhanh hơn
+const LineupImageModal = lazy(() => import('../LineupImageModal'))
 
 export default function Matches({ go }: { go: (tab: string, id?: string) => void }) {
   const ctx = useApp()
@@ -80,7 +82,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
                     <span className={`h-6 w-1 shrink-0 rounded-full ${k === 'A' ? 'bg-sky-500' : 'bg-orange-500'}`} />
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-semibold text-slate-800">
-                        Đội {k} <span className="font-normal text-slate-400">· {ids.length} người</span>
+                        Đội {k} <span className="font-normal text-slate-500">· {ids.length} người</span>
                       </div>
                       <div className="truncate text-[11px] text-slate-500">{ids.map((id) => name(ctx, id)).join(', ')}</div>
                     </div>
@@ -155,10 +157,12 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
 
       {/* Modal xuất ảnh kết quả & nộp tiền hiển thị trực tiếp ở root level */}
       {imageParams && (
-        <LineupImageModal
-          params={imageParams}
-          onClose={() => setImageParams(null)}
-        />
+        <Suspense fallback={null}>
+          <LineupImageModal
+            params={imageParams}
+            onClose={() => setImageParams(null)}
+          />
+        </Suspense>
       )}
     </div>
   )
@@ -565,7 +569,7 @@ function MatchModal({
                               <span className="truncate">{name(ctx, id)}</span>
                               <span className="flex shrink-0 items-center gap-0.5 text-[11px]">
                                 {mem?.isGK && <Icon name="glove" className="h-3.5 w-3.5 text-violet-600" />}
-                                <span className="text-amber-500">{mem?.skill ?? 3}★</span>
+                                <span className="text-amber-600">{mem?.skill ?? 3}★</span>
                               </span>
                             </button>
                             {canEdit && (
@@ -591,7 +595,7 @@ function MatchModal({
         ) : (
           <div className="rounded-2xl border border-amber-200 bg-amber-50/80 p-4 text-sm text-slate-700">
             <div className="flex items-start gap-3">
-              <span className="text-2xl">📋</span>
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-xl bg-amber-100 text-amber-700"><Icon name="receipt" className="h-5 w-5" /></span>
               <div className="flex-1">
                 <div className="font-bold text-slate-800">Trận nhập từ sổ Google Sheet cũ</div>
                 <p className="mt-1 text-xs text-slate-600">
@@ -599,7 +603,7 @@ function MatchModal({
                 </p>
                 <div className="mt-3 flex flex-wrap items-center gap-2">
                   <Btn onClick={onEdit} className="text-xs py-2 px-3.5 shadow-sm">
-                    ✏️ Sắp xếp & sửa đội hình cho trận này
+                    <Icon name="edit" className="h-3.5 w-3.5" /> Sắp xếp & sửa đội hình
                   </Btn>
                   {!canEdit && (
                     <span className="text-[11px] text-amber-800">
@@ -683,7 +687,7 @@ function MatchModal({
                 {o === 'pending'
                   ? 'Trận đấu chưa nhập kết quả'
                   : isPenaltyDecided(m)
-                    ? `🏆 Hoà ${m.scoreA}–${m.scoreB} · Đội ${o} thắng Pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
+                    ? `Hoà ${m.scoreA}–${m.scoreB} · Đội ${o} thắng Pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
                     : o === 'draw'
                       ? 'Kết quả: Hoà'
                       : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
@@ -923,7 +927,7 @@ function MatchModal({
                             <span>{name(ctx, x.memberId)}</span>
                             {isFromAdv && (
                               <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">
-                                💧 Đã trừ tiền ứng
+                                Đã trừ tiền ứng
                               </span>
                             )}
                           </div>
@@ -945,7 +949,7 @@ function MatchModal({
                             onClick={() => setPaid(x, true, ADVANCE_NOTE)}
                             className="rounded-xl bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-800 ring-1 ring-sky-300 hover:bg-sky-100 transition cursor-pointer"
                           >
-                            💧 Trừ tiền ứng
+                            Trừ tiền ứng
                           </button>
                         )}
                         {canEdit ? (
@@ -975,7 +979,7 @@ function MatchModal({
         {canEdit && (
           <div className="border-t border-slate-100 pt-2 text-right">
             <Btn kind="danger" className="text-xs px-3 py-1.5" onClick={del}>
-              🗑️ Xoá trận này
+              <Icon name="trash" className="h-3.5 w-3.5" /> Xoá trận này
             </Btn>
           </div>
         )}

@@ -19,6 +19,15 @@ const TABS: { id: string; label: string; icon: IconName }[] = [
   { id: 'members', label: 'Thành viên', icon: 'users' },
 ]
 
+const THEME_KEY = 'bongda-theme'
+const readDark = () => {
+  try {
+    return localStorage.getItem(THEME_KEY) === 'dark'
+  } catch {
+    return false
+  }
+}
+
 const initialTab = () => {
   const h = location.hash.slice(1)
   return TABS.some((t) => t.id === h) ? h : 'overview'
@@ -33,6 +42,27 @@ export default function App() {
   const [showSettings, setShowSettings] = useState(false)
   const [authError, setAuthError] = useState<{ code: string; message: string; domain?: string } | null>(null)
   const [toastNode, toast] = useToast()
+  // Sáng / tối — mỗi máy tự nhớ lựa chọn của mình
+  const [dark, setDark] = useState(readDark)
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', dark ? '#0a0f0d' : '#15803d')
+    try {
+      localStorage.setItem(THEME_KEY, dark ? 'dark' : 'light')
+    } catch {
+      /* chế độ ẩn danh — vẫn đổi được trong phiên */
+    }
+  }, [dark])
+  const themeBtn = (cls: string) => (
+    <button
+      onClick={() => setDark((d) => !d)}
+      className={cls}
+      aria-label={dark ? 'Chuyển giao diện sáng' : 'Chuyển giao diện tối'}
+      title={dark ? 'Giao diện sáng' : 'Giao diện tối'}
+    >
+      <Icon name={dark ? 'sun' : 'moon'} className="h-5 w-5" />
+    </button>
+  )
 
   useEffect(() => store.subscribe((d, r) => (setData(d), setReady(r))), [])
   useEffect(() => watchAuth(setAuth), [])
@@ -118,7 +148,7 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <div className="min-h-screen lg:pl-64">
         {/* Sidebar (desktop) */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-gradient-to-b from-green-900 to-emerald-950 text-white lg:flex">
+        <aside className="keep-colors fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-gradient-to-b from-green-900 to-emerald-950 text-white lg:flex">
           <div className="flex items-center gap-3 px-5 py-6">
             <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white text-green-800 shadow-lg shadow-black/20">
               <Icon name="ball" className="h-6 w-6" strokeWidth={1.6} />
@@ -146,6 +176,12 @@ export default function App() {
             })}
           </nav>
           <div className="space-y-2 border-t border-white/10 p-4">
+            <button
+              onClick={() => setDark((d) => !d)}
+              className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-green-100/90 transition hover:bg-white/10"
+            >
+              <Icon name={dark ? 'sun' : 'moon'} className="h-5 w-5" /> {dark ? 'Giao diện sáng' : 'Giao diện tối'}
+            </button>
             {auth.isAdmin && (
               <button onClick={() => setShowSettings(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-green-100/90 transition hover:bg-white/10">
                 <Icon name="settings" className="h-5 w-5" /> Cài đặt
@@ -157,7 +193,7 @@ export default function App() {
         </aside>
 
         {/* Header (mobile) */}
-        <header className="sticky top-0 z-30 bg-green-800 px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 text-white shadow-md lg:hidden">
+        <header className="keep-colors sticky top-0 z-30 bg-green-800 px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 text-white shadow-md lg:hidden">
           <div className="flex items-center justify-between gap-2">
             <div className="flex min-w-0 items-center gap-2.5">
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-green-800">
@@ -169,6 +205,7 @@ export default function App() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1 [&>button]:px-2.5 [&>button]:text-xs">
+              {themeBtn('grid h-9 w-9 cursor-pointer place-items-center rounded-xl !px-0 hover:bg-white/10')}
               {auth.isAdmin && (
                 <button onClick={() => setShowSettings(true)} className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl hover:bg-white/10" aria-label="Cài đặt">
                   <Icon name="settings" className="h-5 w-5" />
@@ -243,7 +280,7 @@ export default function App() {
             {authError.code === 'auth/unauthorized-domain' ? (
               <div className="space-y-3">
                 <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800 font-medium">
-                  ⚠️ Tên miền chưa được thêm vào Authorized Domains của Firebase
+                  Tên miền chưa được thêm vào Authorized Domains của Firebase
                 </div>
                 <p className="text-xs leading-relaxed text-slate-600">
                   Firebase Authentication chỉ cho phép đăng nhập Google từ các tên miền có trong danh sách được cấp phép của dự án <strong>app-from-ai</strong>.
@@ -262,7 +299,7 @@ export default function App() {
                         toast('Đã sao chép tên miền!')
                       }}
                     >
-                      📋 Copy
+                      <Icon name="copy" className="h-3.5 w-3.5" /> Copy
                     </Btn>
                   </div>
                 </div>
@@ -279,7 +316,7 @@ export default function App() {
             ) : authError.code === 'auth/popup-blocked' ? (
               <div className="space-y-3">
                 <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800 font-medium">
-                  ⚠️ Trình duyệt chặn cửa sổ Popup đăng nhập
+                  Trình duyệt chặn cửa sổ Popup đăng nhập
                 </div>
                 <p className="text-xs text-slate-600 leading-relaxed">
                   Cửa sổ đăng nhập Google bị trình duyệt chặn. Bạn có thể mở trực tiếp ứng dụng trong một tab mới của trình duyệt để đăng nhập bình thường:

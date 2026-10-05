@@ -4,7 +4,6 @@
  *  - Chế độ thử (không cấu hình gì): lưu trong trình duyệt của máy đang mở, ai mở cũng sửa được.
  */
 import { initializeApp } from 'firebase/app'
-import { getAnalytics, isSupported } from 'firebase/analytics'
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { DEFAULT_SETTINGS, type AppData, type Settings } from './types'
@@ -139,9 +138,10 @@ function createLocalStore(): Store {
 
 const fbApp = isDemo ? null : initializeApp(fbConfig)
 if (fbApp && fbConfig.measurementId && typeof window !== 'undefined') {
-  isSupported().then((supported) => {
-    if (supported) getAnalytics(fbApp)
-  }).catch(() => {})
+  // Chỉ tải thư viện thống kê khi có cấu hình — không làm nặng lần mở app đầu tiên
+  import('firebase/analytics')
+    .then(({ isSupported, getAnalytics }) => isSupported().then((ok) => ok && getAnalytics(fbApp)))
+    .catch(() => {})
 }
 const dbId = (env.VITE_FIREBASE_DATABASE_ID as string | undefined) || '(default)'
 const db = fbApp ? getFirestore(fbApp, dbId) : null

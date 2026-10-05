@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { generateLineupCanvas, type LineupImageParams } from './lineupImage'
+import { Icon } from './icons'
 import { Btn, Modal, useApp } from './ui'
 
 export default function LineupImageModal({
@@ -75,8 +76,8 @@ export default function LineupImageModal({
 
   const modalTitle =
     params.isFinished && showPayment
-      ? '📸 Xuất ảnh kết quả & nộp tiền nước'
-      : '📸 Xuất ảnh đội hình trận đấu'
+      ? 'Xuất ảnh kết quả & nộp tiền'
+      : 'Xuất ảnh đội hình'
 
   return (
     <Modal title={modalTitle} onClose={onClose} zIndex="z-60">
@@ -93,7 +94,7 @@ export default function LineupImageModal({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              💰 Kèm cột đã đóng tiền ({params.outcome === 'A' ? 'Đội B thua' : params.outcome === 'B' ? 'Đội A thua' : 'Đội nộp phạt'})
+              Kèm cột đã đóng tiền ({params.outcome === 'A' ? 'Đội B thua' : params.outcome === 'B' ? 'Đội A thua' : 'Đội nộp phạt'})
             </button>
             <button
               type="button"
@@ -104,7 +105,7 @@ export default function LineupImageModal({
                   : 'text-slate-600 hover:text-slate-900'
               }`}
             >
-              📋 Chỉ đội hình thuần
+              Chỉ đội hình
             </button>
           </div>
         )}
@@ -126,12 +127,12 @@ export default function LineupImageModal({
             </div>
 
             <p className="text-center text-xs text-slate-500">
-              💡 Bấm <strong>"Sao chép ảnh"</strong> rồi mở Zalo nhấn <strong>Ctrl+V</strong> (hoặc chạm giữ chọn Dán) để gửi ảnh cho cả đội!
+              Bấm <strong>"Sao chép ảnh"</strong> rồi mở Zalo nhấn <strong>Ctrl+V</strong> (hoặc chạm giữ chọn Dán) để gửi ảnh cho cả đội!
             </p>
 
             <div className="grid grid-cols-2 gap-2 pt-1">
               <Btn onClick={copyImageToClipboard} className="text-xs py-2.5 flex items-center justify-center gap-1.5">
-                <span>📋</span> Sao chép ảnh Zalo
+                <Icon name="copy" className="h-4 w-4" /> Sao chép ảnh Zalo
               </Btn>
               <Btn kind="soft" onClick={downloadImage} className="text-xs py-2.5 flex items-center justify-center gap-1.5">
                 <span>⬇️</span> Tải ảnh về máy

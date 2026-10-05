@@ -5,6 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#15803d" />
+    <script>
+      // bật giao diện tối trước khi vẽ trang để không bị chớp trắng
+      try { if (localStorage.getItem('bongda-theme') === 'dark') document.documentElement.classList.add('dark') } catch (e) {}
+    </script>
     <meta name="description" content="Quản lý đội bóng: chia đội, trận đấu, quỹ và thành viên." />
     <meta property="og:title" content="Đội bóng" />
     <meta property="og:description" content="Quản lý đội bóng: chia đội, trận đấu, quỹ và thành viên." />

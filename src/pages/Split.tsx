@@ -1,11 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
-import LineupImageModal from '../LineupImageModal'
-import { type LineupImageParams } from '../lineupImage'
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
+import type { LineupImageParams } from '../lineupImage'
 import { fmtDate, matchOutcome, money, newId, splitTeams, todayISO } from '../logic'
 import { saveMatch } from '../actions'
 import type { Match } from '../types'
 import { Icon } from '../icons'
 import { Btn, Card, Empty, Field, Modal, copyText, inputCls, name, useApp } from '../ui'
+
+// Phần xuất ảnh chỉ tải khi bấm nút — app mở nhanh hơn
+const LineupImageModal = lazy(() => import('../LineupImageModal'))
 
 export default function Split({ go, editMatchId }: { go: (tab: string, id?: string) => void; editMatchId?: string | null }) {
   const ctx = useApp()
@@ -210,7 +212,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
         <Empty>Chưa có thành viên nào đang hoạt động trong danh sách đội.</Empty>
         <div className="mt-3 text-center">
           <Btn kind="soft" onClick={() => go('members')}>
-            👥 Vào tab Thành viên để thêm người
+            Vào tab Thành viên để thêm người
           </Btn>
         </div>
       </Card>
@@ -222,8 +224,8 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       {editMatch && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 p-4 text-amber-900 shadow-xs">
           <div className="flex items-center gap-3">
-            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-200 text-xl font-bold text-amber-900">
-              ✏️
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-200 text-amber-900">
+              <Icon name="edit" className="h-5 w-5" />
             </span>
             <div>
               <div className="text-sm font-bold text-amber-900">
@@ -240,11 +242,11 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               onClick={() => go('split', undefined)}
               className="border border-amber-300 bg-white text-xs text-amber-900 hover:bg-amber-100"
             >
-              ✕ Hủy sửa / Chia trận mới
+              Huỷ sửa / Chia trận mới
             </Btn>
             {teams && (
               <Btn onClick={save} className="text-xs">
-                💾 Lưu cập nhật đội hình
+                Lưu đội hình
               </Btn>
             )}
           </div>
@@ -348,7 +350,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                       <span className="truncate">{m.name}</span>
                       {m.isGK && <Icon name="glove" className="h-3.5 w-3.5 shrink-0 text-violet-600" />}
                     </span>
-                    <span className="block text-[11px] leading-tight tracking-tight text-amber-500">
+                    <span className="block text-[11px] leading-tight tracking-tight text-amber-600">
                       {'★'.repeat(m.skill)}
                       <span className="text-slate-200">{'★'.repeat(5 - m.skill)}</span>
                     </span>
@@ -404,7 +406,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                           className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-lg bg-white px-2 py-1.5 text-left text-[13px] font-medium ring-1 ring-black/5 transition hover:ring-green-400"
                         >
                           <span className="truncate">{name(ctx, id)}</span>
-                          <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-amber-500">
+                          <span className="flex shrink-0 items-center gap-0.5 text-[11px] text-amber-600">
                             {ctx.memberById.get(id)?.isGK && <Icon name="glove" className="h-3.5 w-3.5 text-violet-600" />}
                             {ctx.memberById.get(id)?.skill ?? 3}★
                           </span>
@@ -487,7 +489,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                 className="inline-flex cursor-pointer items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 transition hover:border-green-300 hover:bg-green-50/60"
               >
                 <Icon name="calendar" className="h-3.5 w-3.5 text-slate-400" />
-                {fmtDate(m.date)} <span className="font-normal text-slate-400">· {m.teamA.length + m.teamB.length} người</span>
+                {fmtDate(m.date)} <span className="font-normal text-slate-500">· {m.teamA.length + m.teamB.length} người</span>
               </button>
             ))}
           </div>
@@ -555,10 +557,12 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
 
       {/* Modal xuất ảnh đội hình sân bóng chất lượng cao */}
       {imageModalParams && (
-        <LineupImageModal
-          params={imageModalParams}
-          onClose={() => setImageModalParams(null)}
-        />
+        <Suspense fallback={null}>
+          <LineupImageModal
+            params={imageModalParams}
+            onClose={() => setImageModalParams(null)}
+          />
+        </Suspense>
       )}
     </div>
   )
@@ -679,7 +683,7 @@ function PastMatchDetailModal({
           <div>
             {match.scoreA != null && match.scoreB != null ? (
               <span className="rounded-lg bg-green-100 px-2.5 py-1 font-bold text-green-900">
-                Tỉ số: 🟦 {match.scoreA} – {match.scoreB} 🟧
+                Tỉ số: {match.scoreA} – {match.scoreB}
               </span>
             ) : (
               <span className="rounded-lg bg-amber-100 px-2.5 py-1 font-medium text-amber-800">
@@ -692,7 +696,7 @@ function PastMatchDetailModal({
         {/* Thanh công cụ sửa đội hình nhanh */}
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
           <span className="flex items-center gap-1.5 font-medium">
-            <span>💡</span> Bấm vào tên cầu thủ bên dưới để chuyển đội
+            Bấm tên cầu thủ để chuyển sang đội kia
           </span>
           <div className="flex flex-wrap items-center gap-1.5">
             <button
@@ -700,14 +704,14 @@ function PastMatchDetailModal({
               onClick={reSplit}
               className="rounded-xl border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-800 shadow-xs hover:bg-sky-50 transition cursor-pointer"
             >
-              🔄 Chia lại 2 đội
+              Chia lại 2 đội
             </button>
             <button
               type="button"
               onClick={onEditLineup}
               className="rounded-xl border border-green-300 bg-green-700 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-green-800 transition cursor-pointer"
             >
-              ✏️ Chọn lại người / Đổi ngày
+              Chọn lại người / ngày
             </button>
           </div>
         </div>
@@ -732,7 +736,7 @@ function PastMatchDetailModal({
               >
                 <div className="mb-3 flex items-baseline justify-between border-b border-black/5 pb-2 font-bold">
                   <span className={k === 'teamA' ? 'text-sky-900' : 'text-orange-900'}>
-                    {k === 'teamA' ? '🟦 Đội A' : '🟧 Đội B'} {isWinner && '🏆'}
+                    {k === 'teamA' ? 'Đội A' : 'Đội B'} {isWinner && <span className="ml-1 rounded-full bg-white/80 px-1.5 py-0.5 text-[10px]">Thắng</span>}
                   </span>
                   <span className="text-xs font-semibold text-slate-500">
                     {list.length} người · {skill(list)}★
@@ -757,8 +761,8 @@ function PastMatchDetailModal({
                                 <span className="truncate">{name(ctx, id)}</span>
                               </div>
                               <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400">
-                                {mem?.isGK && <span title="Thủ môn">🧤</span>}
-                                <span>{'★'.repeat(mem?.skill ?? 3)}</span>
+                                {mem?.isGK && <Icon name="glove" className="h-3.5 w-3.5 text-violet-600" />}
+                                <span className="text-amber-600">{mem?.skill ?? 3}★</span>
                                 <span className="text-[10px] text-slate-300">⇄</span>
                               </span>
                             </button>
@@ -784,20 +788,20 @@ function PastMatchDetailModal({
         {/* Nút tác vụ */}
         <div className="flex flex-col gap-2 pt-2 sm:flex-row">
           <Btn kind="soft" className="flex-1" onClick={onCopyLineup}>
-            📋 Sao chép text
+            <Icon name="copy" className="h-3.5 w-3.5" /> Sao chép chữ
           </Btn>
           <Btn
             kind="soft"
             className="flex-1 bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100"
             onClick={onExportImage}
           >
-            📸 Xuất ảnh Zalo
+            <Icon name="image" className="h-3.5 w-3.5" /> Xuất ảnh Zalo
           </Btn>
           <Btn kind="ghost" className="flex-1 border border-slate-200" onClick={onEditLineup}>
-            ✏️ Sửa đầy đủ
+            <Icon name="edit" className="h-3.5 w-3.5" /> Sửa đầy đủ
           </Btn>
           <Btn className="flex-1" onClick={onReusePlayers}>
-            ✨ Dùng cho hôm nay
+            Dùng cho hôm nay
           </Btn>
         </div>
       </div>
@@ -821,7 +825,7 @@ function HistoryListModal({
 }) {
 
   return (
-    <Modal title="📅 Lịch sử đội hình các ngày đã đá" onClose={onClose}>
+    <Modal title="Lịch sử đội hình các ngày đã đá" onClose={onClose}>
       <div className="space-y-3">
         <p className="text-xs text-slate-500">
           Bấm vào ngày để xem chi tiết hoặc bấm "Sửa" để thay đổi đội hình.
@@ -855,7 +859,7 @@ function HistoryListModal({
                       )}
                     </div>
                     <div className="mt-1 text-xs text-slate-500">
-                      🟦 {m.teamA.length} người vs 🟧 {m.teamB.length} người ({total} cầu thủ)
+                      Đội A {m.teamA.length} · Đội B {m.teamB.length} · {total} người
                     </div>
                   </div>
 
@@ -865,7 +869,7 @@ function HistoryListModal({
                       className="border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
                       onClick={() => onEditMatch(m)}
                     >
-                      ✏️ Sửa
+                      <Icon name="edit" className="h-3.5 w-3.5" /> Sửa
                     </Btn>
                     <Btn
                       kind="ghost"

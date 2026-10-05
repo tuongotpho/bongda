@@ -9,7 +9,9 @@
     "lint": "tsc --noEmit",
     "preview": "vite preview",
     "test": "vitest run",
-    "dev:demo": "vite --mode demo"
+    "dev:demo": "vite --mode demo",
+    "predev": "node scripts/gen-dark.mjs",
+    "prebuild": "node scripts/gen-dark.mjs"
   },
   "devDependencies": {
     "@tailwindcss/vite": "^4.3.3",

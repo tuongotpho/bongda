@@ -48,7 +48,7 @@ export function Card({
 
 type BtnKind = 'primary' | 'ghost' | 'danger' | 'soft'
 const btnCls: Record<BtnKind, string> = {
-  primary: 'bg-green-700 text-white shadow-sm shadow-green-900/20 hover:bg-green-800 disabled:bg-slate-300 disabled:shadow-none',
+  primary: 'bg-green-700 text-white shadow-sm shadow-green-900/20 hover:bg-green-800 disabled:bg-slate-200 disabled:text-slate-500 disabled:shadow-none',
   soft: 'bg-green-50 text-green-800 ring-1 ring-inset ring-green-200 hover:bg-green-100',
   ghost: 'text-slate-600 hover:bg-slate-100',
   danger: 'text-red-600 hover:bg-red-50',
@@ -164,7 +164,7 @@ export function useToast() {
     return () => clearTimeout(t)
   }, [msg])
   const node = msg ? (
-    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[70] flex justify-center px-4 lg:bottom-8 lg:pl-64">
+    <div className="keep-colors pointer-events-none fixed inset-x-0 bottom-24 z-[70] flex justify-center px-4 lg:bottom-8 lg:pl-64">
       <div className="animate-fade-up flex max-w-md items-center gap-2 rounded-full bg-slate-900/95 py-2 pr-4 pl-2.5 text-sm text-white shadow-xl backdrop-blur">
         <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-green-500">
           <Icon name="check" className="h-3 w-3" strokeWidth={3} />
