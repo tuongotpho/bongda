@@ -1,5 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import { buildObligations, debtors, fundSummary, matchOutcome, reminderMessage, splitTeams, waterCharges } from './logic'
+import {
+  ADVANCE_NOTE,
+  autoDeductMatchAdvance,
+  buildObligations,
+  debtors,
+  fundSummary,
+  getMemberAdvanceInfo,
+  matchOutcome,
+  reminderMessage,
+  splitTeams,
+  waterCharges,
+} from './logic'
 import { DEFAULT_SETTINGS, type AppData, type Match, type Member } from './types'
 
 const mem = (id: string, skill = 3, isGK = false): Member => ({ id, name: id.toUpperCase(), skill, isGK, active: true, monthlyFee: 100000, createdAt: 0 })
@@ -69,6 +80,19 @@ describe('tiền nước', () => {
     expect(waterCharges(match({ ...draw, drawRule: 'none' }))).toEqual([])
   })
 
+  it('hòa tỉ số nhưng có thắng penalty: đội thua pen nộp phạt tiền nước', () => {
+    const draw = { scoreA: 3, scoreB: 3 }
+    // Đội A thắng pen -> Đội B nộp phạt
+    const mA = match({ ...draw, penaltyWinner: 'A' })
+    expect(matchOutcome(mA)).toBe('A')
+    expect(waterCharges(mA).map((c) => c.memberId)).toEqual(['c', 'd'])
+
+    // Đội B thắng tỉ số pen 5-4 -> Đội A nộp phạt
+    const mB = match({ ...draw, penaltyScoreA: 4, penaltyScoreB: 5 })
+    expect(matchOutcome(mB)).toBe('B')
+    expect(waterCharges(mB).map((c) => c.memberId)).toEqual(['a', 'b'])
+  })
+
   it('trận nhập từ sổ cũ dùng danh sách phạt có sẵn, không cần tỉ số', () => {
     const charges = [{ memberId: 'a', amount: 10000 }]
     expect(waterCharges(match({ scoreA: null, scoreB: null, teamA: [], teamB: [], charges }))).toEqual(charges)
@@ -131,3 +155,64 @@ describe('nghĩa vụ và người nợ', () => {
     expect(msg).toContain('Tổng còn thiếu: 320.000đ')
   })
 })
+
+describe('tiền ứng trước phạt thua', () => {
+  it('tính chính xác số tiền ứng còn lại sau các trận thua', () => {
+    const member: Member = {
+      ...mem('m1'),
+      advanceAmount: 100000,
+      advanceDate: '2026-10-01',
+    }
+
+    // Chưa trừ trận nào
+    const info1 = getMemberAdvanceInfo(member, [])
+    expect(info1.total).toBe(100000)
+    expect(info1.used).toBe(0)
+    expect(info1.remaining).toBe(100000)
+
+    // Đã trừ 2 trận thua (mỗi trận 20k)
+    const payments = [
+      { id: 'water_match1_m1', memberId: 'm1', kind: 'water' as const, refId: 'match1', amount: 20000, paidAt: 1, note: ADVANCE_NOTE },
+      { id: 'water_match2_m1', memberId: 'm1', kind: 'water' as const, refId: 'match2', amount: 20000, paidAt: 2, note: ADVANCE_NOTE },
+      // Một khoản nộp tiền mặt không phải tiền ứng
+      { id: 'water_match3_m1', memberId: 'm1', kind: 'water' as const, refId: 'match3', amount: 20000, paidAt: 3 },
+    ]
+
+    const info2 = getMemberAdvanceInfo(member, payments)
+    expect(info2.total).toBe(100000)
+    expect(info2.used).toBe(40000)
+    expect(info2.remaining).toBe(60000)
+    expect(info2.usedCount).toBe(2)
+  })
+
+  it('tự động trừ tiền ứng khi lưu kết quả trận đấu', () => {
+    const mAdv: Member = { ...mem('pAdv'), advanceAmount: 60000, advanceDate: '2026-10-01' }
+    const mNormal: Member = { ...mem('pNormal') }
+
+    const matchObj: Match = {
+      id: 'match10',
+      date: '2026-10-05',
+      teamA: ['pWinner'],
+      teamB: ['pAdv', 'pNormal'],
+      scoreA: 2,
+      scoreB: 0,
+      waterFee: 20000,
+      drawRule: 'half',
+      createdAt: 0,
+    }
+
+    const appData = data({
+      members: [mAdv, mNormal, mem('pWinner')],
+      matches: [matchObj],
+      payments: [],
+    })
+
+    const res = autoDeductMatchAdvance(matchObj, appData)
+    expect(res.deductedMemberIds).toEqual(['pAdv'])
+    expect(res.paymentsToAdd).toHaveLength(1)
+    expect(res.paymentsToAdd[0].id).toBe('water_match10_pAdv')
+    expect(res.paymentsToAdd[0].note).toBe(ADVANCE_NOTE)
+    expect(res.paymentsToAdd[0].amount).toBe(20000)
+  })
+})
+

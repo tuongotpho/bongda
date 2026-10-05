@@ -2,9 +2,9 @@ import { obligationId } from './logic'
 import { store } from './store'
 import type { Obligation, Payment } from './types'
 
-export function setPaid(o: Obligation, paid: boolean) {
+export function setPaid(o: Obligation, paid: boolean, note?: string) {
   if (!paid) return store.remove('payments', o.id)
-  const p: Payment = { id: o.id, memberId: o.memberId, kind: o.kind, refId: o.refId, amount: o.amount, paidAt: Date.now() }
+  const p: Payment = { id: o.id, memberId: o.memberId, kind: o.kind, refId: o.refId, amount: o.amount, paidAt: Date.now(), note }
   return store.put('payments', o.id, p)
 }
 

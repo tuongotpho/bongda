@@ -4,6 +4,7 @@
  *  - Chế độ thử (không cấu hình gì): lưu trong trình duyệt của máy đang mở, ai mở cũng sửa được.
  */
 import { initializeApp } from 'firebase/app'
+import { getAnalytics, isSupported } from 'firebase/analytics'
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
 import { DEFAULT_SETTINGS, type AppData, type Settings } from './types'
@@ -16,7 +17,10 @@ const fbConfig = {
   apiKey: env.VITE_FIREBASE_API_KEY as string | undefined,
   authDomain: env.VITE_FIREBASE_AUTH_DOMAIN as string | undefined,
   projectId: env.VITE_FIREBASE_PROJECT_ID as string | undefined,
+  storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET as string | undefined,
+  messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID as string | undefined,
   appId: env.VITE_FIREBASE_APP_ID as string | undefined,
+  measurementId: env.VITE_FIREBASE_MEASUREMENT_ID as string | undefined,
 }
 export const isDemo = !fbConfig.apiKey || !fbConfig.projectId
 
@@ -134,6 +138,11 @@ function createLocalStore(): Store {
 // ---------- Firebase ----------
 
 const fbApp = isDemo ? null : initializeApp(fbConfig)
+if (fbApp && fbConfig.measurementId && typeof window !== 'undefined') {
+  isSupported().then((supported) => {
+    if (supported) getAnalytics(fbApp)
+  }).catch(() => {})
+}
 const dbId = (env.VITE_FIREBASE_DATABASE_ID as string | undefined) || '(default)'
 const db = fbApp ? getFirestore(fbApp, dbId) : null
 const auth = fbApp ? getAuth(fbApp) : null
@@ -216,5 +225,10 @@ export function watchAuth(cb: (s: AuthState) => void): () => void {
   })
 }
 
-export const login = () => (auth ? signInWithPopup(auth, new GoogleAuthProvider()).then(() => {}) : Promise.resolve())
+export const login = () => {
+  if (!auth) return Promise.resolve()
+  const provider = new GoogleAuthProvider()
+  provider.setCustomParameters({ prompt: 'select_account' })
+  return signInWithPopup(auth, provider).then(() => {})
+}
 export const logout = () => (auth ? signOut(auth) : Promise.resolve())

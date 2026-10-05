@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { setPaid } from '../actions'
-import { matchOutcome, money, newId } from '../logic'
+import { fmtDate, getMemberAdvanceInfo, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
 import { login, store } from '../store'
 import type { Member } from '../types'
 import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, useApp } from '../ui'
@@ -19,6 +19,7 @@ export default function Members() {
   const [showBulkAdd, setShowBulkAdd] = useState(false)
   const [search, setSearch] = useState('')
   const [filter, setFilter] = useState<'all' | 'active' | 'inactive' | 'debt'>('active')
+  const [deleteConfirmMember, setDeleteConfirmMember] = useState<Member | null>(null)
 
   const stats = useMemo(() => {
     const s = new Map<string, Stat>()
@@ -26,7 +27,7 @@ export default function Members() {
     for (const m of data.matches) {
       const o = matchOutcome(m)
       if (o === 'pending') continue
-      for (const [ids, side] of [[m.teamA, 'A'], [m.teamB, 'B']] as const)
+      for (const [ids, side] of [[m.teamA || [], 'A'], [m.teamB || [], 'B']] as const)
         for (const id of ids) {
           const st = get(id)
           st.played++
@@ -81,26 +82,14 @@ export default function Members() {
     setShowBulkAdd(true)
   }
 
-  const handleDeleteQuick = async (m: Member, e: React.MouseEvent) => {
+  const handleDeleteQuick = (m: Member, e: React.MouseEvent) => {
     e.stopPropagation()
     if (!canEdit) {
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để xóa thành viên.')
       login().catch(() => {})
       return
     }
-
-    const matchesCount = data.matches.filter((match) => match.teamA.includes(m.id) || match.teamB.includes(m.id)).length
-    const monthsCount = data.months.filter((mo) => m.id in mo.amounts).length
-    const paymentsCount = data.payments.filter((p) => p.memberId === m.id).length
-    const hasHistory = matchesCount > 0 || monthsCount > 0 || paymentsCount > 0
-
-    const msg = hasHistory
-      ? `Thành viên "${m.name}" đã tham gia ${matchesCount} trận và có tên trong ${monthsCount} tháng quỹ.\n\nBạn có chắc chắn muốn XÓA HẲN người này khỏi danh sách đội?\n(Nếu chỉ muốn tạm ẩn người này khỏi các trận mới, hãy chọn "Cho nghỉ" thay vì xóa hẳn)`
-      : `Xác nhận xóa thành viên "${m.name}" khỏi danh sách đội?`
-
-    if (!confirm(msg)) return
-    await store.remove('members', m.id)
-    toast(`Đã xóa thành viên "${m.name}"`)
+    setDeleteConfirmMember(m)
   }
 
   return (
@@ -207,9 +196,17 @@ export default function Members() {
               const owe = debt.get(m.id) ?? 0
               return (
                 <li key={m.id} className="group relative">
-                  <button
+                  <div
+                    role="button"
+                    tabIndex={0}
                     onClick={() => setEdit(m)}
-                    className={`flex h-full w-full items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3.5 text-left transition hover:-translate-y-0.5 hover:border-green-200 hover:bg-white hover:shadow-md ${
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setEdit(m)
+                      }
+                    }}
+                    className={`flex h-full w-full cursor-pointer items-center justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-3.5 text-left transition hover:-translate-y-0.5 hover:border-green-200 hover:bg-white hover:shadow-md ${
                       m.active ? '' : 'opacity-60 grayscale'
                     }`}
                   >
@@ -237,6 +234,29 @@ export default function Members() {
                         <div className="text-xs text-slate-500">
                           {st ? `${st.played} trận (${st.won}T·${st.drawn}H·${st.lost}B)` : 'chưa đá trận nào'}
                         </div>
+                        {(() => {
+                          const adv = getMemberAdvanceInfo(m, data.payments)
+                          if (!adv.total) return null
+                          return (
+                            <div className="mt-1 flex items-center gap-1">
+                              <span
+                                className={`inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 text-[11px] font-semibold ring-1 ${
+                                  adv.remaining > 0
+                                    ? 'bg-sky-50 text-sky-800 ring-sky-200'
+                                    : 'bg-amber-50 text-amber-800 ring-amber-200'
+                                }`}
+                                title={`Đã ứng: ${money(adv.total)} (ngày ${fmtDate(m.advanceDate || '')}) · Đã trừ ${adv.usedCount} trận (${money(adv.used)})`}
+                              >
+                                <span>💧</span>
+                                {adv.remaining > 0 ? (
+                                  <span>Ứng còn: {money(adv.remaining)}</span>
+                                ) : (
+                                  <span>Hết tiền ứng (0đ)</span>
+                                )}
+                              </span>
+                            </div>
+                          )
+                        })()}
                       </div>
                     </div>
 
@@ -251,19 +271,22 @@ export default function Members() {
                         </span>
                       )}
 
-                      {/* Quick Delete button on hover (desktop) or always tap-accessible */}
+                      {/* Quick Delete button */}
                       {canEdit && (
-                        <span
-                          role="button"
-                          onClick={(e) => handleDeleteQuick(m, e)}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            handleDeleteQuick(m, e)
+                          }}
                           title={`Xóa ${m.name}`}
-                          className="rounded-lg p-1 text-slate-300 transition hover:bg-red-50 hover:text-red-600 sm:opacity-0 sm:group-hover:opacity-100"
+                          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-red-50 hover:text-red-600 sm:opacity-60 sm:group-hover:opacity-100 cursor-pointer text-sm"
                         >
                           🗑️
-                        </span>
+                        </button>
                       )}
                     </div>
-                  </button>
+                  </div>
                 </li>
               )
             })}
@@ -272,25 +295,78 @@ export default function Members() {
       </Card>
 
       {/* Single Add / Edit Modal */}
-      {edit && <MemberModal member={edit === 'new' ? null : edit} onClose={() => setEdit(null)} />}
+      {edit && (
+        <MemberModal
+          member={edit === 'new' ? null : edit}
+          onClose={() => setEdit(null)}
+          onDeleteMember={(m) => setDeleteConfirmMember(m)}
+        />
+      )}
 
       {/* Bulk Add Modal */}
       {showBulkAdd && <BulkAddModal onClose={() => setShowBulkAdd(false)} />}
+
+      {/* Modal xác nhận xóa an toàn — không dùng window.confirm tránh lỗi iframe */}
+      {deleteConfirmMember && (
+        <ConfirmDeleteModal
+          member={deleteConfirmMember}
+          onConfirm={async () => {
+            const m = deleteConfirmMember
+            try {
+              await store.remove('members', m.id)
+              toast(`Đã xóa thành viên "${m.name}" khỏi danh sách đội!`)
+              setDeleteConfirmMember(null)
+            } catch (err: any) {
+              console.error('Lỗi khi xóa thành viên:', err)
+              toast('Lỗi khi xóa: ' + (err?.message || 'Không thể xóa thành viên'))
+            }
+          }}
+          onDeactivate={async () => {
+            const m = deleteConfirmMember
+            try {
+              await store.put('members', m.id, { ...m, active: false })
+              toast(`Đã chuyển "${m.name}" sang trạng thái tạm nghỉ.`)
+              setDeleteConfirmMember(null)
+            } catch (err: any) {
+              console.error('Lỗi khi cập nhật:', err)
+              toast('Lỗi: ' + (err?.message || 'Không thể cập nhật'))
+            }
+          }}
+          onClose={() => setDeleteConfirmMember(null)}
+        />
+      )}
     </div>
   )
 }
 
-function MemberModal({ member, onClose }: { member: Member | null; onClose: () => void }) {
+function MemberModal({
+  member,
+  onClose,
+  onDeleteMember,
+}: {
+  member: Member | null
+  onClose: () => void
+  onDeleteMember?: (m: Member) => void
+}) {
   const { data, obligations, canEdit, toast } = useApp()
   const [nm, setNm] = useState(member?.name ?? '')
   const [skill, setSkill] = useState(member?.skill ?? 3)
   const [isGK, setIsGK] = useState(member?.isGK ?? false)
   const [fee, setFee] = useState(String(member?.monthlyFee ?? data.settings.monthlyFee))
+  const [advanceAmount, setAdvanceAmount] = useState(
+    member?.advanceAmount ? String(member.advanceAmount) : '',
+  )
+  const [advanceDate, setAdvanceDate] = useState(member?.advanceDate ?? todayISO())
+  const [advanceNote, setAdvanceNote] = useState(member?.advanceNote ?? '')
+
   const obs = member ? obligations.filter((o) => o.memberId === member.id).reverse() : []
   const owe = obs.filter((o) => !o.paid).reduce((s, o) => s + o.amount, 0)
+  const advInfo = member ? getMemberAdvanceInfo(member, data.payments) : null
 
-  const matchesCount = member ? data.matches.filter((m) => m.teamA.includes(member.id) || m.teamB.includes(member.id)).length : 0
-  const monthsCount = member ? data.months.filter((mo) => member.id in mo.amounts).length : 0
+  const matchesCount = member
+    ? data.matches.filter((m) => (m.teamA || []).includes(member.id) || (m.teamB || []).includes(member.id)).length
+    : 0
+  const monthsCount = member ? data.months.filter((mo) => member.id in (mo.amounts || {})).length : 0
   const paymentsCount = member ? data.payments.filter((p) => p.memberId === member.id).length : 0
   const hasHistory = matchesCount > 0 || monthsCount > 0 || paymentsCount > 0
 
@@ -308,9 +384,34 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
     }
 
     const monthlyFee = Number(fee) || 0
+    const advAmt = advanceAmount.trim() ? Math.max(0, Number(advanceAmount)) : undefined
+    const advDt = advAmt ? advanceDate || todayISO() : undefined
+    const advNt = advAmt ? advanceNote.trim() || undefined : undefined
+
     const m: Member = member
-      ? { ...member, name: n, skill, isGK, monthlyFee, ...patch }
-      : { id: newId(), name: n, skill, isGK, monthlyFee, active: true, createdAt: Date.now() }
+      ? {
+          ...member,
+          name: n,
+          skill,
+          isGK,
+          monthlyFee,
+          advanceAmount: advAmt,
+          advanceDate: advDt,
+          advanceNote: advNt,
+          ...patch,
+        }
+      : {
+          id: newId(),
+          name: n,
+          skill,
+          isGK,
+          monthlyFee,
+          advanceAmount: advAmt,
+          advanceDate: advDt,
+          advanceNote: advNt,
+          active: true,
+          createdAt: Date.now(),
+        }
 
     await store.put('members', m.id, m)
     toast(member ? 'Đã lưu thông tin' : `Đã thêm thành viên "${n}"`)
@@ -321,25 +422,21 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
       setSkill(3)
       setIsGK(false)
       setFee(String(data.settings.monthlyFee))
+      setAdvanceAmount('')
+      setAdvanceDate(todayISO())
+      setAdvanceNote('')
     }
   }
 
-  const del = async () => {
+  const del = () => {
     if (!member) return
     if (!canEdit) {
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để xóa thành viên.')
       login().catch(() => {})
       return
     }
-
-    const confirmMsg = hasHistory
-      ? `Thành viên "${member.name}" đã tham gia ${matchesCount} trận và ${monthsCount} tháng quỹ.\n\nBạn có chắc chắn muốn XÓA HẲN người này khỏi danh sách đội?\n(Nếu chỉ muốn ẩn khỏi danh sách chia đội và quỹ tương lai, hãy chọn "Cho nghỉ" thay vì xóa)`
-      : `Xác nhận xóa thành viên "${member.name}" khỏi danh sách đội?`
-
-    if (!confirm(confirmMsg)) return
-    await store.remove('members', member.id)
-    toast(`Đã xóa thành viên "${member.name}"`)
     onClose()
+    onDeleteMember?.(member)
   }
 
   return (
@@ -399,6 +496,105 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
             </div>
           </label>
 
+          {/* KHU VỰC ỨNG TIỀN PHẠT THUA TRƯỚC */}
+          <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3.5 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="font-bold text-sky-950 text-xs sm:text-sm flex items-center gap-1.5">
+                <span>💧</span> Ứng trước tiền thua trận (tiền cọc nước)
+              </span>
+              {advInfo && advInfo.total > 0 && (
+                <span
+                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                    advInfo.remaining > 0 ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'
+                  }`}
+                >
+                  Còn dư: {money(advInfo.remaining)}
+                </span>
+              )}
+            </div>
+
+            {advInfo && advInfo.total > 0 && (
+              <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-2.5 text-center shadow-2xs text-xs">
+                <div>
+                  <div className="text-[11px] text-slate-400">Đã ứng</div>
+                  <div className="font-bold text-slate-800 mt-0.5">{money(advInfo.total)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">Đã trừ ({advInfo.usedCount} trận)</div>
+                  <div className="font-bold text-orange-600 mt-0.5">-{money(advInfo.used)}</div>
+                </div>
+                <div>
+                  <div className="text-[11px] text-slate-400">Còn lại</div>
+                  <div className="font-bold text-emerald-600 mt-0.5">{money(advInfo.remaining)}</div>
+                </div>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+              <Field
+                label="Số tiền ứng trước (đồng)"
+                hint={advanceAmount ? money(Number(advanceAmount) || 0) : 'Để trống nếu không ứng'}
+              >
+                <input
+                  inputMode="numeric"
+                  placeholder="VD: 100000, 200000..."
+                  value={advanceAmount}
+                  onChange={(e) => setAdvanceAmount(e.target.value.replace(/\D/g, ''))}
+                  className={inputCls}
+                />
+              </Field>
+              <Field label="Ngày ứng tiền">
+                <input
+                  type="date"
+                  value={advanceDate}
+                  onChange={(e) => setAdvanceDate(e.target.value)}
+                  className={inputCls}
+                />
+              </Field>
+            </div>
+
+            {/* Các nút nạp nhanh */}
+            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+              <span className="font-medium text-slate-500">Nạp nhanh:</span>
+              {[100000, 200000, 500000].map((amt) => (
+                <button
+                  key={amt}
+                  type="button"
+                  onClick={() => {
+                    const cur = Number(advanceAmount) || 0
+                    setAdvanceAmount(String(cur + amt))
+                    setAdvanceDate(todayISO())
+                  }}
+                  className="rounded-lg border border-sky-200 bg-white px-2 py-0.5 font-semibold text-sky-800 hover:bg-sky-100 transition cursor-pointer text-xs"
+                >
+                  +{money(amt)}
+                </button>
+              ))}
+              {Number(advanceAmount) > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setAdvanceAmount('')}
+                  className="rounded-lg px-2 py-0.5 text-slate-400 hover:text-red-500 transition cursor-pointer text-xs"
+                >
+                  Xóa ứng
+                </button>
+              )}
+            </div>
+
+            <Field label="Ghi chú ứng tiền" hint="Tùy chọn">
+              <input
+                placeholder="VD: Chuyển khoản ngày 01/10..."
+                value={advanceNote}
+                onChange={(e) => setAdvanceNote(e.target.value)}
+                className={inputCls}
+              />
+            </Field>
+
+            <p className="text-[11px] text-sky-900/80 leading-relaxed">
+              💡 Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
+            </p>
+          </div>
+
           <Btn className="w-full py-2.5" onClick={() => save()}>
             {member ? '💾 Lưu thay đổi' : '➕ Thêm (Enter để thêm tiếp người sau)'}
           </Btn>
@@ -419,15 +615,26 @@ function MemberModal({ member, onClose }: { member: Member | null; onClose: () =
               <Empty>Chưa phát sinh nghĩa vụ nào.</Empty>
             ) : (
               <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto text-sm">
-                {obs.map((o) => (
-                  <li key={o.id} className="flex items-center justify-between py-2">
-                    <div>
-                      <div className="font-medium text-slate-700">{o.label}</div>
-                      <div className="text-xs text-slate-500">{money(o.amount)}</div>
-                    </div>
-                    {canEdit ? <PayToggle paid={o.paid} onChange={(p) => setPaid(o, p)} /> : <PaidBadge paid={o.paid} />}
-                  </li>
-                ))}
+                {obs.map((o) => {
+                  const pay = data.payments.find((p) => p.id === o.id)
+                  const isAdv = pay && isAdvancePayment(pay)
+                  return (
+                    <li key={o.id} className="flex items-center justify-between py-2">
+                      <div>
+                        <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                          <span>{o.label}</span>
+                          {isAdv && (
+                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
+                              💧 Trừ tiền ứng
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-xs text-slate-500">{money(o.amount)}</div>
+                      </div>
+                      {canEdit ? <PayToggle paid={o.paid} onChange={(p) => setPaid(o, p)} /> : <PaidBadge paid={o.paid} />}
+                    </li>
+                  )
+                })}
               </ul>
             )}
           </div>
@@ -566,6 +773,101 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
           <Btn className="flex-1" disabled={!validToAdd.length} onClick={handleAddAll}>
             ➕ Thêm {validToAdd.length} thành viên
           </Btn>
+        </div>
+      </div>
+    </Modal>
+  )
+}
+
+function ConfirmDeleteModal({
+  member,
+  onConfirm,
+  onDeactivate,
+  onClose,
+}: {
+  member: Member
+  onConfirm: () => Promise<void>
+  onDeactivate: () => Promise<void>
+  onClose: () => void
+}) {
+  const { data } = useApp()
+  const [loading, setLoading] = useState(false)
+
+  const matchesCount = data.matches.filter(
+    (match) => (match.teamA || []).includes(member.id) || (match.teamB || []).includes(member.id),
+  ).length
+  const monthsCount = data.months.filter((mo) => member.id in (mo.amounts || {})).length
+  const paymentsCount = data.payments.filter((p) => p.memberId === member.id).length
+  const hasHistory = matchesCount > 0 || monthsCount > 0 || paymentsCount > 0
+
+  return (
+    <Modal title={`Xác nhận xóa: ${member.name}`} onClose={onClose} zIndex="z-60">
+      <div className="space-y-4">
+        <div className="flex items-center gap-3 rounded-2xl bg-slate-50 p-3.5">
+          <span className="grid h-12 w-12 place-items-center rounded-2xl bg-amber-100 text-2xl">
+            {member.isGK ? '🧤' : '👤'}
+          </span>
+          <div>
+            <div className="font-bold text-slate-800 text-base">{member.name}</div>
+            <div className="text-xs text-slate-500">
+              {hasHistory ? (
+                <span>Đã có {matchesCount} trận đấu · {monthsCount} tháng quỹ · {paymentsCount} lần nộp tiền</span>
+              ) : (
+                <span className="text-emerald-700 font-medium">Chưa phát sinh dữ liệu lịch sử thi đấu</span>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {hasHistory ? (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 space-y-2">
+            <div className="font-bold flex items-center gap-1.5 text-sm">
+              <span>⚠️</span> Cầu thủ này đã có lịch sử trong đội
+            </div>
+            <p className="leading-relaxed">
+              Nếu bạn <b>XÓA HẲN</b>, tên cầu thủ này vẫn hiển thị là <i>(đã xoá)</i> trong các trận cũ để không làm lệch quỹ.<br />
+              <b>Khuyên dùng:</b> Nếu người này chỉ nghỉ đá một thời gian, hãy chọn <b>"Cho tạm nghỉ"</b> để giữ lại tên và lịch sử đẹp trong sổ.
+            </p>
+          </div>
+        ) : (
+          <p className="text-sm text-slate-600">
+            Bạn có chắc chắn muốn xóa thành viên <b>{member.name}</b> khỏi danh sách đội bóng? Hành động này không thể hoàn tác.
+          </p>
+        )}
+
+        <div className="flex flex-col gap-2 pt-2">
+          {hasHistory && member.active && (
+            <Btn
+              kind="soft"
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true)
+                await onDeactivate()
+                setLoading(false)
+              }}
+              className="w-full py-2.5 font-semibold text-xs text-center"
+            >
+              ⏸️ Cho tạm nghỉ (khuyên dùng — ẩn khỏi trận mới)
+            </Btn>
+          )}
+
+          <div className="flex gap-2">
+            <Btn kind="ghost" disabled={loading} className="flex-1" onClick={onClose}>
+              Hủy
+            </Btn>
+            <Btn
+              kind="danger"
+              disabled={loading}
+              className="flex-1 font-bold"
+              onClick={async () => {
+                setLoading(true)
+                await onConfirm()
+                setLoading(false)
+              }}
+            >
+              {loading ? 'Đang xóa...' : '🗑️ Vẫn xóa hẳn'}
+            </Btn>
+          </div>
         </div>
       </div>
     </Modal>

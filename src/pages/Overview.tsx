@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { setPaid } from '../actions'
-import { debtors, fmtDate, fundSummary, matchOutcome, money, personalMessage, reminderMessage } from '../logic'
+import { debtors, fmtDate, fundSummary, getMemberAdvanceInfo, getPenaltyWinner, isPenaltyDecided, matchOutcome, money, personalMessage, reminderMessage } from '../logic'
 import { FUND_NAMES } from '../types'
 import { Btn, Card, Empty, Modal, copyText, inputCls, useApp } from '../ui'
 
@@ -12,6 +12,21 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
   const owed = list.reduce((s, d) => s + d.total, 0)
   const [showMsg, setShowMsg] = useState(false)
   const lastMatch = [...data.matches].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)[0]
+
+  const advanceStats = useMemo(() => {
+    let total = 0
+    let remaining = 0
+    let count = 0
+    for (const m of data.members) {
+      if (m.advanceAmount && m.advanceAmount > 0) {
+        const info = getMemberAdvanceInfo(m, data.payments)
+        total += info.total
+        remaining += info.remaining
+        count++
+      }
+    }
+    return { total, remaining, count }
+  }, [data.members, data.payments])
 
   const copy = async (text: string) => toast((await copyText(text)) ? 'Đã sao chép — dán vào Zalo nhé' : 'Không sao chép được, hãy bôi đen và copy tay')
 
@@ -41,6 +56,30 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
         <Stat icon="🧾" label="Thành viên còn thiếu" value={money(owed)} tone={owed ? 'red' : 'green'} sub={`${list.length} người`} />
         <Stat icon="⚽" label="Trận đã ghi" value={String(data.matches.length)} sub={`${data.members.filter((m) => m.active).length} thành viên`} />
       </div>
+
+      {advanceStats.count > 0 && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-sky-200 bg-sky-50/70 p-4 shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 place-items-center rounded-xl bg-sky-100 text-xl">💧</span>
+            <div>
+              <div className="text-xs text-sky-800 font-semibold">TÀI KHOẢN ỨNG TRƯỚC TIỀN THUA CỦA ANH EM</div>
+              <div className="text-base font-bold text-sky-950 mt-0.5">
+                Còn dư: {money(advanceStats.remaining)}{' '}
+                <span className="text-xs font-normal text-sky-700">
+                  (Tổng đã ứng: {money(advanceStats.total)} · {advanceStats.count} người)
+                </span>
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={() => go('members')}
+            className="rounded-xl bg-white px-3 py-1.5 text-xs font-semibold text-sky-800 ring-1 ring-sky-300 hover:bg-sky-50 transition cursor-pointer"
+          >
+            Quản lý số dư ứng →
+          </button>
+        </div>
+      )}
 
       <div className="grid items-start gap-6 xl:grid-cols-3">
       <Card
@@ -121,11 +160,26 @@ function LastMatch({ id }: { id: string }) {
   return (
     <div className="text-sm">
       <div className="text-slate-500">{fmtDate(m.date)}</div>
-      <div className="mt-1 text-lg font-semibold">
-        Đội A {m.scoreA ?? '?'} – {m.scoreB ?? '?'} Đội B
+      <div className="mt-1 flex flex-wrap items-baseline gap-2 text-lg font-semibold">
+        <span>
+          Đội A {m.scoreA ?? '?'} – {m.scoreB ?? '?'} Đội B
+        </span>
+        {isPenaltyDecided(m) && (
+          <span className="rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-bold text-emerald-800">
+            {m.penaltyScoreA != null && m.penaltyScoreB != null
+              ? `Pen: ${m.penaltyScoreA}-${m.penaltyScoreB} (Đội ${getPenaltyWinner(m)} thắng)`
+              : `Pen: Đội ${getPenaltyWinner(m)} thắng`}
+          </span>
+        )}
       </div>
       <div className="text-slate-600">
-        {o === 'pending' ? 'Chưa nhập tỉ số' : o === 'draw' ? 'Hoà' : `Đội ${o} thắng — đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt`}
+        {o === 'pending'
+          ? 'Chưa nhập tỉ số'
+          : isPenaltyDecided(m)
+            ? `Hoà tỉ số (${m.scoreA}-${m.scoreB}) — Đội ${o} thắng luân lưu (Đội ${o === 'A' ? 'B' : 'A'} nộp tiền phạt)`
+            : o === 'draw'
+              ? 'Hoà'
+              : `Đội ${o} thắng — đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt`}
       </div>
     </div>
   )

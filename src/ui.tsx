@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { createPortal } from 'react-dom'
 import type { AppData, Member, Obligation } from './types'
 
 export interface Ctx {
@@ -7,6 +8,7 @@ export interface Ctx {
   canEdit: boolean
   memberById: Map<string, Member>
   toast: (msg: string) => void
+  login?: () => void
 }
 
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx)
@@ -52,18 +54,29 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   )
 }
 
-export function Modal({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+export function Modal({
+  title,
+  onClose,
+  children,
+  zIndex = 'z-50',
+}: {
+  title: string
+  onClose: () => void
+  children: ReactNode
+  zIndex?: string
+}) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
   }, [onClose])
-  return (
-    <div className="fixed inset-0 z-40 flex items-end justify-center bg-slate-900/50 backdrop-blur-sm sm:items-center" onClick={onClose}>
+
+  const modalEl = (
+    <div className={`fixed inset-0 ${zIndex} flex items-end justify-center bg-slate-900/60 backdrop-blur-sm sm:items-center`} onClick={onClose}>
       <div className="animate-fade-up max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-lg font-semibold">{title}</h3>
-          <button onClick={onClose} className="rounded-lg px-2 text-2xl leading-none text-slate-400 hover:text-slate-700" aria-label="Đóng">
+          <button onClick={onClose} className="rounded-lg px-2 text-2xl leading-none text-slate-400 hover:text-slate-700 cursor-pointer" aria-label="Đóng">
             ×
           </button>
         </div>
@@ -71,6 +84,11 @@ export function Modal({ title, onClose, children }: { title: string; onClose: ()
       </div>
     </div>
   )
+
+  if (typeof document !== 'undefined') {
+    return createPortal(modalEl, document.body)
+  }
+  return modalEl
 }
 
 export function Empty({ children }: { children: ReactNode }) {

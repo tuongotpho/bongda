@@ -10,7 +10,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
   const num = (v: string) => Number(v.replace(/\D/g, '')) || 0
 
   const save = async () => {
-    await store.saveSettings({ ...s, teamName: s.teamName.trim() || 'Đội bóng' })
+    await store.saveSettings({ ...s, teamName: s.teamName.trim() || 'FC Kỹ thuật - An toàn & friends' })
     toast('Đã lưu cài đặt')
     onClose()
   }

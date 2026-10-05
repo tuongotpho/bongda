@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fmtDate, money, newId, splitTeams, todayISO } from '../logic'
+import LineupImageModal from '../LineupImageModal'
+import { type LineupImageParams } from '../lineupImage'
+import { fmtDate, matchOutcome, money, newId, splitTeams, todayISO } from '../logic'
 import { store } from '../store'
 import type { Match } from '../types'
 import { Btn, Card, Empty, Field, Modal, copyText, inputCls, name, useApp } from '../ui'
@@ -13,8 +15,29 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
   const [teams, setTeams] = useState<{ teamA: string[]; teamB: string[] } | null>(null)
   const [viewMatch, setViewMatch] = useState<Match | null>(null)
   const [showHistoryModal, setShowHistoryModal] = useState(false)
+  const [imageModalParams, setImageModalParams] = useState<LineupImageParams | null>(null)
 
   const editMatch = useMemo(() => data.matches.find((m) => m.id === editMatchId), [data.matches, editMatchId])
+
+  const selectableMembers = useMemo(() => {
+    const map = new Map<string, (typeof data.members)[0]>()
+    for (const m of data.members) {
+      if (m.active) map.set(m.id, m)
+    }
+    if (editMatch) {
+      for (const id of [...(editMatch.teamA || []), ...(editMatch.teamB || [])]) {
+        const found = data.members.find((m) => m.id === id)
+        if (found) map.set(found.id, found)
+      }
+      if (editMatch.charges) {
+        for (const c of editMatch.charges) {
+          const found = data.members.find((m) => m.id === c.memberId)
+          if (found) map.set(found.id, found)
+        }
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'vi'))
+  }, [data.members, editMatch])
 
   useEffect(() => {
     if (editMatch) {
@@ -40,7 +63,8 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
   }, [data.matches])
 
   const upcoming = useMemo(() => matchesWithLineup.filter((m) => m.scoreA == null), [matchesWithLineup])
-  const toggle = (id: string) =>
+
+  const toggle = (id: string) => {
     setPicked((s) => {
       const n = new Set(s)
       if (n.has(id)) n.delete(id)
@@ -48,7 +72,45 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       return n
     })
 
-  const doSplit = () => setTeams(splitTeams(active.filter((m) => picked.has(m.id))))
+    // Đồng bộ trực tiếp vào teams nếu teams đang hiển thị
+    setTeams((t) => {
+      if (!t) return t
+      const inA = t.teamA.includes(id)
+      const inB = t.teamB.includes(id)
+      if (inA || inB) {
+        // Cầu thủ bị bỏ chọn trong danh sách -> lập tức bỏ khỏi 2 đội
+        return {
+          teamA: t.teamA.filter((x) => x !== id),
+          teamB: t.teamB.filter((x) => x !== id),
+        }
+      } else {
+        // Cầu thủ mới được tích chọn -> thêm vào đội có ít người hơn
+        if (t.teamA.length <= t.teamB.length) {
+          return { teamA: [...t.teamA, id], teamB: t.teamB }
+        } else {
+          return { teamA: t.teamA, teamB: [...t.teamB, id] }
+        }
+      }
+    })
+  }
+
+  const removePlayerFromTeams = (id: string) => {
+    setPicked((s) => {
+      const n = new Set(s)
+      n.delete(id)
+      return n
+    })
+    setTeams((t) => {
+      if (!t) return t
+      return {
+        teamA: t.teamA.filter((x) => x !== id),
+        teamB: t.teamB.filter((x) => x !== id),
+      }
+    })
+    toast(`Đã xoá ${name(ctx, id)} khỏi đội hình.`)
+  }
+
+  const doSplit = () => setTeams(splitTeams(selectableMembers.filter((m) => picked.has(m.id))))
 
   const move = (id: string) =>
     setTeams((t) =>
@@ -85,9 +147,27 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
   }
 
   const save = async () => {
-    if (!teams) return
+    if (!teams && !picked.size) return
     if (!canEdit) {
-      toast('Chỉ tài khoản Thủ quỹ mới có quyền lưu trận vào sổ. Bạn vẫn có thể bấm "Sao chép đội hình" để gửi Zalo!')
+      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để lưu trận vào sổ.')
+      ctx.login?.()
+      return
+    }
+
+    // Đảm bảo teamA và teamB chỉ chứa những người thực sự được chọn trong picked:
+    let finalA = teams ? teams.teamA.filter((id) => picked.has(id)) : []
+    let finalB = teams ? teams.teamB.filter((id) => picked.has(id)) : []
+
+    // Nếu có người trong picked mà chưa có trong team nào (ví dụ vừa tick thêm):
+    for (const id of picked) {
+      if (!finalA.includes(id) && !finalB.includes(id)) {
+        if (finalA.length <= finalB.length) finalA.push(id)
+        else finalB.push(id)
+      }
+    }
+
+    if (finalA.length === 0 && finalB.length === 0) {
+      toast('Vui lòng chọn ít nhất 2 cầu thủ cho trận đấu.')
       return
     }
 
@@ -95,17 +175,15 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       ? {
           ...editMatch,
           date,
-          teamA: teams.teamA,
-          teamB: teams.teamB,
-          // Nếu trận cũ có charges, khi chuyển qua format mới ta bỏ charges đi
-          // Nhưng ta giữ lại note, score (nếu có)
+          teamA: finalA,
+          teamB: finalB,
           charges: undefined,
         }
       : {
           id: newId(),
           date,
-          teamA: teams.teamA,
-          teamB: teams.teamB,
+          teamA: finalA,
+          teamB: finalB,
           scoreA: null,
           scoreB: null,
           waterFee: data.settings.waterFee,
@@ -114,7 +192,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
         }
 
     await store.put('matches', m.id, m)
-    toast(editMatch ? 'Đã cập nhật đội hình cho trận đấu!' : 'Đã lưu trận mới. Đá xong nhớ nhập tỉ số!')
+    toast(editMatch ? `Đã cập nhật trận ngày ${fmtDate(date)} (${finalA.length + finalB.length} người)!` : 'Đã lưu trận mới vào sổ.')
     setTeams(null)
     setPicked(new Set())
     go('matches')
@@ -134,6 +212,39 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
 
   return (
     <div className="space-y-6">
+      {/* Banner thông báo khi đang chỉnh sửa đội hình trận có sẵn */}
+      {editMatch && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-200 bg-amber-50/95 p-4 text-amber-900 shadow-xs">
+          <div className="flex items-center gap-3">
+            <span className="grid h-10 w-10 shrink-0 place-items-center rounded-xl bg-amber-200 text-xl font-bold text-amber-900">
+              ✏️
+            </span>
+            <div>
+              <div className="text-sm font-bold text-amber-900">
+                Đang sửa đội hình trận ngày {fmtDate(editMatch.date)}
+              </div>
+              <div className="text-xs text-amber-800">
+                Bạn có thể chọn lại danh sách cầu thủ, bấm "Chia lại", hoặc bấm trực tiếp vào tên cầu thủ bên dưới để đổi đội.
+              </div>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Btn
+              kind="ghost"
+              onClick={() => go('split', undefined)}
+              className="border border-amber-300 bg-white text-xs text-amber-900 hover:bg-amber-100"
+            >
+              ✕ Hủy sửa / Chia trận mới
+            </Btn>
+            {teams && (
+              <Btn onClick={save} className="text-xs">
+                💾 Lưu cập nhật đội hình
+              </Btn>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Thanh tác vụ nhanh: Xem lại ngày cũ */}
       <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-white/70 bg-white/80 p-4 shadow-sm backdrop-blur">
         <div className="flex items-center gap-2 text-sm text-slate-700">
@@ -141,7 +252,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
           <div>
             <div className="font-bold text-slate-800">Lịch sử chia đội các ngày cũ</div>
             <div className="text-xs text-slate-500">
-              Đã lưu {matchesWithLineup.length} ngày đá · Xem lại đội hình hoặc tái sử dụng người đi đá
+              Đã lưu {matchesWithLineup.length} ngày đá · Xem lại, sửa đội hình hoặc tái sử dụng người đi đá
             </div>
           </div>
         </div>
@@ -193,7 +304,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                   </div>
                 </div>
                 <div className="mt-2 text-right text-xs font-semibold text-green-700">
-                  Bấm xem chi tiết & xếp lại →
+                  Bấm xem chi tiết & sửa đội hình →
                 </div>
               </div>
             ))}
@@ -204,7 +315,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       {/* Khu vực tạo và sắp xếp đội hình mới */}
       <div className={`grid items-start gap-6 ${teams ? 'xl:grid-cols-2' : ''}`}>
         <Card
-          title="1. Ai đi đá hôm nay?"
+          title={editMatch ? `1. Danh sách đi đá trận ngày ${fmtDate(date)}` : '1. Ai đi đá hôm nay?'}
           right={
             <span className="rounded-full bg-green-50 px-3 py-1 text-sm font-semibold text-green-800">
               Đã chọn: {picked.size} người
@@ -218,8 +329,8 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               </Field>
             </div>
             <div className="flex flex-wrap gap-1">
-              <Btn kind="ghost" onClick={() => setPicked(new Set(active.map((m) => m.id)))} className="text-xs">
-                Chọn hết ({active.length})
+              <Btn kind="ghost" onClick={() => setPicked(new Set(selectableMembers.map((m) => m.id)))} className="text-xs">
+                Chọn hết ({selectableMembers.length})
               </Btn>
               <Btn kind="ghost" onClick={() => setPicked(new Set())} className="text-xs">
                 Bỏ chọn
@@ -237,7 +348,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               teams ? 'xl:grid-cols-3 2xl:grid-cols-4' : 'lg:grid-cols-5 xl:grid-cols-6 2xl:grid-cols-8'
             }`}
           >
-            {active.map((m) => {
+            {selectableMembers.map((m) => {
               const on = picked.has(m.id)
               return (
                 <button
@@ -275,7 +386,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
         {/* Kết quả sắp xếp đội hình */}
         {teams && (
           <Card
-            title="2. Kết quả chia đội"
+            title={editMatch ? '2. Đội hình trận đấu (Bấm tên để đổi đội)' : '2. Kết quả chia đội'}
             right={
               <Btn kind="ghost" onClick={doSplit} className="text-xs">
                 🔄 Chia lại
@@ -303,17 +414,27 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
                   </div>
                   <ul className="space-y-1.5">
                     {teams[k].map((id) => (
-                      <li key={id}>
+                      <li key={id} className="flex items-center gap-1">
                         <button
+                          type="button"
                           onClick={() => move(id)}
                           title="Bấm để đổi sang đội kia"
-                          className="flex w-full items-center justify-between rounded-xl bg-white px-2.5 py-2 text-left text-sm font-medium shadow-xs ring-1 ring-black/5 transition hover:scale-[1.02] hover:ring-green-400"
+                          className="flex flex-1 items-center justify-between rounded-xl bg-white px-2.5 py-2 text-left text-sm font-medium shadow-xs ring-1 ring-black/5 transition hover:scale-[1.01] hover:ring-green-400 cursor-pointer"
                         >
                           <span className="truncate">{name(ctx, id)}</span>
                           <span className="flex items-center gap-1 text-xs text-slate-400">
                             {ctx.memberById.get(id)?.isGK && '🧤'}
                             <span>{'★'.repeat(ctx.memberById.get(id)?.skill ?? 3)}</span>
+                            <span className="text-[10px] text-slate-300">⇄</span>
                           </span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => removePlayerFromTeams(id)}
+                          title={`Xoá ${name(ctx, id)} khỏi trận này`}
+                          className="rounded-xl p-2 text-slate-300 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+                        >
+                          ✕
                         </button>
                       </li>
                     ))}
@@ -322,12 +443,43 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
               ))}
             </div>
 
-            <div className="mt-4 grid grid-cols-2 gap-2">
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
               <Btn kind="soft" onClick={() => copyLineup(teams)}>
-                📋 Sao chép đội hình Zalo
+                📋 Sao chép text Zalo
               </Btn>
-              <Btn onClick={save} disabled={!teams.teamA.length || !teams.teamB.length}>
-                💾 Lưu trận vào sổ
+              <Btn
+                kind="soft"
+                onClick={() => {
+                  const isFinished = !!(editMatch && editMatch.scoreA != null && editMatch.scoreB != null)
+                  const editObs = editMatch ? ctx.obligations.filter((x) => x.kind === 'water' && x.refId === editMatch.id) : []
+                  const paidByMemberId = new Map(editObs.map((x) => [x.memberId, x.paid]))
+                  const chargedMemberIds = new Set(editObs.map((x) => x.memberId))
+                  const outcome = editMatch ? matchOutcome(editMatch) : 'pending'
+
+                  setImageModalParams({
+                    teamName: data.settings.teamName,
+                    date,
+                    teamA: teams.teamA,
+                    teamB: teams.teamB,
+                    waterFee: editMatch?.waterFee ?? data.settings.waterFee,
+                    memberById: ctx.memberById,
+                    isFinished,
+                    scoreA: editMatch?.scoreA,
+                    scoreB: editMatch?.scoreB,
+                    penaltyScoreA: editMatch?.penaltyScoreA,
+                    penaltyScoreB: editMatch?.penaltyScoreB,
+                    penaltyWinner: editMatch?.penaltyWinner,
+                    outcome,
+                    paidByMemberId,
+                    chargedMemberIds,
+                  })
+                }}
+                className="bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100"
+              >
+                📸 Xuất ảnh đội hình
+              </Btn>
+              <Btn onClick={save} disabled={!teams.teamA.length || !teams.teamB.length} className="col-span-2 sm:col-span-1">
+                {editMatch ? '💾 Lưu cập nhật đội hình' : '💾 Lưu trận vào sổ'}
               </Btn>
             </div>
           </Card>
@@ -342,6 +494,36 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
           onSelectMatch={(m) => setViewMatch(m)}
           onReusePlayers={() => loadPlayersFromMatch(viewMatch)}
           onCopyLineup={() => copyLineup({ teamA: viewMatch.teamA, teamB: viewMatch.teamB }, viewMatch.date)}
+          onExportImage={() => {
+            const isFinished = viewMatch.scoreA != null && viewMatch.scoreB != null
+            const pastObs = ctx.obligations.filter((x) => x.kind === 'water' && x.refId === viewMatch.id)
+            const paidByMemberId = new Map(pastObs.map((x) => [x.memberId, x.paid]))
+            const chargedMemberIds = new Set(pastObs.map((x) => x.memberId))
+            const outcome = matchOutcome(viewMatch)
+
+            setImageModalParams({
+              teamName: data.settings.teamName,
+              date: viewMatch.date,
+              teamA: viewMatch.teamA,
+              teamB: viewMatch.teamB,
+              waterFee: viewMatch.waterFee,
+              memberById: ctx.memberById,
+              isFinished,
+              scoreA: viewMatch.scoreA,
+              scoreB: viewMatch.scoreB,
+              penaltyScoreA: viewMatch.penaltyScoreA,
+              penaltyScoreB: viewMatch.penaltyScoreB,
+              penaltyWinner: viewMatch.penaltyWinner,
+              outcome,
+              paidByMemberId,
+              chargedMemberIds,
+            })
+          }}
+          onEditLineup={() => {
+            const m = viewMatch
+            setViewMatch(null)
+            go('split', m.id)
+          }}
           onClose={() => setViewMatch(null)}
         />
       )}
@@ -355,7 +537,19 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
             setViewMatch(m)
           }}
           onReusePlayers={(m) => loadPlayersFromMatch(m)}
+          onEditMatch={(m) => {
+            setShowHistoryModal(false)
+            go('split', m.id)
+          }}
           onClose={() => setShowHistoryModal(false)}
+        />
+      )}
+
+      {/* Modal xuất ảnh đội hình sân bóng chất lượng cao */}
+      {imageModalParams && (
+        <LineupImageModal
+          params={imageModalParams}
+          onClose={() => setImageModalParams(null)}
         />
       )}
     </div>
@@ -364,11 +558,13 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
 
 /** Modal xem chi tiết đội hình ngày cũ — thiết kế 2 đội tương tự modal sắp xếp trận mới */
 function PastMatchDetailModal({
-  match,
+  match: initialMatch,
   allMatches,
   onSelectMatch,
   onReusePlayers,
   onCopyLineup,
+  onExportImage,
+  onEditLineup,
   onClose,
 }: {
   match: Match
@@ -376,11 +572,71 @@ function PastMatchDetailModal({
   onSelectMatch: (m: Match) => void
   onReusePlayers: () => void
   onCopyLineup: () => void
+  onExportImage: () => void
+  onEditLineup: () => void
   onClose: () => void
 }) {
   const ctx = useApp()
+  const { canEdit, toast } = ctx
+  const liveMatch = ctx.data.matches.find((m) => m.id === initialMatch.id) ?? initialMatch
+  const [match, setMatch] = useState<Match>(liveMatch)
+
+  useEffect(() => {
+    setMatch(liveMatch)
+  }, [liveMatch])
+
   const skill = (ids: string[]) => ids.reduce((s, id) => s + (ctx.memberById.get(id)?.skill ?? 3), 0)
   const totalPlayers = match.teamA.length + match.teamB.length
+
+  const movePlayer = async (id: string) => {
+    if (!canEdit) {
+      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để sửa đội hình.')
+      ctx.login?.()
+      return
+    }
+    const inA = match.teamA.includes(id)
+    const nextA = inA ? match.teamA.filter((x) => x !== id) : [...match.teamA, id]
+    const nextB = inA ? [...match.teamB, id] : match.teamB.filter((x) => x !== id)
+    const nextMatch: Match = { ...match, teamA: nextA, teamB: nextB }
+    setMatch(nextMatch)
+    await store.put('matches', nextMatch.id, nextMatch)
+    toast(`Đã chuyển ${name(ctx, id)} sang Đội ${inA ? 'B' : 'A'}`)
+  }
+
+  const removePlayer = async (id: string) => {
+    if (!canEdit) {
+      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để sửa đội hình.')
+      ctx.login?.()
+      return
+    }
+    const pName = name(ctx, id)
+    if (!confirm(`Xoá cầu thủ "${pName}" khỏi trận ngày ${fmtDate(match.date)}?`)) return
+    const nextA = match.teamA.filter((x) => x !== id)
+    const nextB = match.teamB.filter((x) => x !== id)
+    const nextMatch: Match = { ...match, teamA: nextA, teamB: nextB }
+    setMatch(nextMatch)
+    await store.put('matches', nextMatch.id, nextMatch)
+    toast(`Đã xoá ${pName} khỏi danh sách trận đấu.`)
+  }
+
+  const reSplit = async () => {
+    if (!canEdit) {
+      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để chia lại đội.')
+      ctx.login?.()
+      return
+    }
+    const allIds = [...match.teamA, ...match.teamB]
+    const players = allIds.map((id) => ctx.memberById.get(id)).filter(Boolean) as (typeof ctx.data.members)[0][]
+    if (players.length < 2) {
+      toast('Cần ít nhất 2 cầu thủ để chia đội.')
+      return
+    }
+    const res = splitTeams(players)
+    const nextMatch: Match = { ...match, teamA: res.teamA, teamB: res.teamB }
+    setMatch(nextMatch)
+    await store.put('matches', nextMatch.id, nextMatch)
+    toast('Đã chia lại 2 đội ngẫu nhiên cân bằng!')
+  }
 
   return (
     <Modal title={`Đội hình ngày ${fmtDate(match.date)}`} onClose={onClose}>
@@ -425,6 +681,29 @@ function PastMatchDetailModal({
           </div>
         </div>
 
+        {/* Thanh công cụ sửa đội hình nhanh */}
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
+          <span className="flex items-center gap-1.5 font-medium">
+            <span>💡</span> Bấm vào tên cầu thủ bên dưới để chuyển đội
+          </span>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={reSplit}
+              className="rounded-xl border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-800 shadow-xs hover:bg-sky-50 transition cursor-pointer"
+            >
+              🔄 Chia lại 2 đội
+            </button>
+            <button
+              type="button"
+              onClick={onEditLineup}
+              className="rounded-xl border border-green-300 bg-green-700 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-green-800 transition cursor-pointer"
+            >
+              ✏️ Chọn lại người / Đổi ngày
+            </button>
+          </div>
+        </div>
+
         {/* Bố cục 2 đội tương tự sắp xếp trận mới */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           {(['teamA', 'teamB'] as const).map((k) => {
@@ -452,28 +731,43 @@ function PastMatchDetailModal({
                   </span>
                 </div>
 
-                <ul className="space-y-1.5 text-xs">
-                  {list.map((id) => {
-                    const mem = ctx.memberById.get(id)
-                    return (
-                      <li
-                        key={id}
-                        className="flex items-center justify-between rounded-xl bg-white px-2.5 py-2 font-medium shadow-xs"
-                      >
-                        <div className="flex items-center gap-1.5 truncate">
-                          <span className="grid h-5 w-5 place-items-center rounded-full bg-slate-100 text-[10px] font-bold">
-                            {name(ctx, id).trim().split(/\s+/).pop()?.[0]?.toUpperCase()}
-                          </span>
-                          <span className="truncate">{name(ctx, id)}</span>
-                        </div>
-                        <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400">
-                          {mem?.isGK && <span title="Thủ môn">🧤</span>}
-                          <span>{'★'.repeat(mem?.skill ?? 3)}</span>
-                        </span>
-                      </li>
-                    )
-                  })}
-                </ul>
+                    <ul className="space-y-1.5 text-xs">
+                      {list.map((id) => {
+                        const mem = ctx.memberById.get(id)
+                        return (
+                          <li key={id} className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => movePlayer(id)}
+                              title="Bấm để đổi sang đội kia"
+                              className="flex flex-1 items-center justify-between rounded-xl bg-white px-2.5 py-2 text-left text-xs font-medium shadow-xs ring-1 ring-black/5 transition hover:scale-[1.01] hover:ring-green-400 cursor-pointer"
+                            >
+                              <div className="flex items-center gap-1.5 truncate">
+                                <span className="grid h-5 w-5 place-items-center rounded-full bg-slate-100 text-[10px] font-bold">
+                                  {name(ctx, id).trim().split(/\s+/).pop()?.[0]?.toUpperCase()}
+                                </span>
+                                <span className="truncate">{name(ctx, id)}</span>
+                              </div>
+                              <span className="flex shrink-0 items-center gap-1 text-[11px] text-slate-400">
+                                {mem?.isGK && <span title="Thủ môn">🧤</span>}
+                                <span>{'★'.repeat(mem?.skill ?? 3)}</span>
+                                <span className="text-[10px] text-slate-300">⇄</span>
+                              </span>
+                            </button>
+                            {canEdit && (
+                              <button
+                                type="button"
+                                onClick={() => removePlayer(id)}
+                                title={`Xoá ${name(ctx, id)} khỏi trận`}
+                                className="rounded-xl p-1.5 text-slate-300 hover:bg-red-50 hover:text-red-600 transition cursor-pointer"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </li>
+                        )
+                      })}
+                    </ul>
               </div>
             )
           })}
@@ -482,10 +776,20 @@ function PastMatchDetailModal({
         {/* Nút tác vụ */}
         <div className="flex flex-col gap-2 pt-2 sm:flex-row">
           <Btn kind="soft" className="flex-1" onClick={onCopyLineup}>
-            📋 Sao chép đội hình Zalo
+            📋 Sao chép text
+          </Btn>
+          <Btn
+            kind="soft"
+            className="flex-1 bg-sky-50 text-sky-800 ring-sky-200 hover:bg-sky-100"
+            onClick={onExportImage}
+          >
+            📸 Xuất ảnh Zalo
+          </Btn>
+          <Btn kind="ghost" className="flex-1 border border-slate-200" onClick={onEditLineup}>
+            ✏️ Sửa đầy đủ
           </Btn>
           <Btn className="flex-1" onClick={onReusePlayers}>
-            ✨ Dùng danh sách này cho hôm nay
+            ✨ Dùng cho hôm nay
           </Btn>
         </div>
       </div>
@@ -498,11 +802,13 @@ function HistoryListModal({
   matches,
   onSelectMatch,
   onReusePlayers,
+  onEditMatch,
   onClose,
 }: {
   matches: Match[]
   onSelectMatch: (m: Match) => void
   onReusePlayers: (m: Match) => void
+  onEditMatch: (m: Match) => void
   onClose: () => void
 }) {
 
@@ -510,7 +816,7 @@ function HistoryListModal({
     <Modal title="📅 Lịch sử đội hình các ngày đã đá" onClose={onClose}>
       <div className="space-y-3">
         <p className="text-xs text-slate-500">
-          Bấm vào ngày để xem chi tiết 2 đội hoặc bấm "Dùng lại" để chọn ngay những người đó cho trận hôm nay.
+          Bấm vào ngày để xem chi tiết hoặc bấm "Sửa" để thay đổi đội hình.
         </p>
 
         {!matches.length ? (
@@ -546,6 +852,13 @@ function HistoryListModal({
                   </div>
 
                   <div className="flex shrink-0 items-center gap-1.5">
+                    <Btn
+                      kind="ghost"
+                      className="border border-green-200 bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 hover:bg-green-100"
+                      onClick={() => onEditMatch(m)}
+                    >
+                      ✏️ Sửa
+                    </Btn>
                     <Btn
                       kind="ghost"
                       className="border border-slate-200 px-2.5 py-1 text-xs"

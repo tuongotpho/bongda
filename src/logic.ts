@@ -1,4 +1,4 @@
-import type { AppData, Charge, FundId, Match, Member, Obligation } from './types'
+import type { AppData, Charge, FundId, Match, Member, Obligation, Payment } from './types'
 
 export const money = (n: number) => n.toLocaleString('vi-VN') + 'đ'
 
@@ -73,7 +73,33 @@ export function matchOutcome(m: Match): MatchOutcome {
   if (m.scoreA == null || m.scoreB == null) return 'pending'
   if (m.scoreA > m.scoreB) return 'A'
   if (m.scoreB > m.scoreA) return 'B'
+  // Khi hòa tỉ số: xét kết quả đá luân lưu penalty nếu có
+  if (m.penaltyWinner === 'A') return 'A'
+  if (m.penaltyWinner === 'B') return 'B'
+  if (m.penaltyScoreA != null && m.penaltyScoreB != null) {
+    if (m.penaltyScoreA > m.penaltyScoreB) return 'A'
+    if (m.penaltyScoreB > m.penaltyScoreA) return 'B'
+  }
   return 'draw'
+}
+
+/** Kiểm tra trận đấu có phân định bằng đá luân lưu penalty khi hòa tỉ số không */
+export function isPenaltyDecided(m: Match): boolean {
+  if (m.scoreA == null || m.scoreB == null || m.scoreA !== m.scoreB) return false
+  if (m.penaltyWinner === 'A' || m.penaltyWinner === 'B') return true
+  if (m.penaltyScoreA != null && m.penaltyScoreB != null && m.penaltyScoreA !== m.penaltyScoreB) return true
+  return false
+}
+
+/** Lấy đội thắng luân lưu penalty: 'A' | 'B' | null */
+export function getPenaltyWinner(m: Match): 'A' | 'B' | null {
+  if (m.scoreA == null || m.scoreB == null || m.scoreA !== m.scoreB) return null
+  if (m.penaltyWinner === 'A' || m.penaltyWinner === 'B') return m.penaltyWinner
+  if (m.penaltyScoreA != null && m.penaltyScoreB != null) {
+    if (m.penaltyScoreA > m.penaltyScoreB) return 'A'
+    if (m.penaltyScoreB > m.penaltyScoreA) return 'B'
+  }
+  return null
 }
 
 /** Làm tròn lên bội số 1.000đ cho dễ thu */
@@ -83,11 +109,11 @@ export function waterCharges(m: Match): Charge[] {
   if (m.charges) return m.charges
   const o = matchOutcome(m)
   if (o === 'pending') return []
-  if (o === 'A') return m.teamB.map((id) => ({ memberId: id, amount: m.waterFee }))
-  if (o === 'B') return m.teamA.map((id) => ({ memberId: id, amount: m.waterFee }))
+  if (o === 'A') return (m.teamB || []).map((id) => ({ memberId: id, amount: m.waterFee }))
+  if (o === 'B') return (m.teamA || []).map((id) => ({ memberId: id, amount: m.waterFee }))
   if (m.drawRule === 'none') return []
   const amount = m.drawRule === 'half' ? roundK(m.waterFee / 2) : m.waterFee
-  return [...m.teamA, ...m.teamB].map((id) => ({ memberId: id, amount }))
+  return [...(m.teamA || []), ...(m.teamB || [])].map((id) => ({ memberId: id, amount }))
 }
 
 // ---------- Nghĩa vụ đóng tiền ----------
@@ -126,6 +152,81 @@ export function buildObligations(data: AppData): Obligation[] {
     }
   }
   return out.sort((a, b) => a.date.localeCompare(b.date))
+}
+
+// ---------- Tiền ứng trước phạt nước ----------
+
+export const ADVANCE_NOTE = 'Trừ từ tiền ứng trước'
+
+export const isAdvancePayment = (p: { note?: string }) =>
+  Boolean(p.note && (p.note.includes('tiền ứng') || p.note.includes('ứng trước')))
+
+export interface MemberAdvanceInfo {
+  total: number
+  used: number
+  remaining: number
+  usedCount: number
+}
+
+export function getMemberAdvanceInfo(member: Member, payments: Payment[]): MemberAdvanceInfo {
+  const total = Math.max(0, member.advanceAmount || 0)
+  const usedPayments = payments.filter(
+    (p) => p.memberId === member.id && p.kind === 'water' && isAdvancePayment(p),
+  )
+  const used = usedPayments.reduce((s, p) => s + p.amount, 0)
+  const remaining = Math.max(0, total - used)
+  return {
+    total,
+    used,
+    remaining,
+    usedCount: usedPayments.length,
+  }
+}
+
+/**
+ * Tự động trừ tiền ứng cho các cầu thủ bị phạt trong trận nếu họ còn số dư tiền ứng.
+ */
+export function autoDeductMatchAdvance(
+  m: Match,
+  data: AppData,
+): { paymentsToAdd: Payment[]; deductedMemberIds: string[] } {
+  const charges = waterCharges(m)
+  if (!charges.length) return { paymentsToAdd: [], deductedMemberIds: [] }
+
+  const paidSet = new Set(data.payments.map((p) => p.id))
+  const remainingByMember = new Map<string, number>()
+  for (const mem of data.members) {
+    if (mem.advanceAmount && mem.advanceAmount > 0) {
+      const info = getMemberAdvanceInfo(mem, data.payments)
+      remainingByMember.set(mem.id, info.remaining)
+    }
+  }
+
+  const paymentsToAdd: Payment[] = []
+  const deductedMemberIds: string[] = []
+
+  for (const c of charges) {
+    const obId = obligationId('water', m.id, c.memberId)
+    if (!paidSet.has(obId)) {
+      const curRemaining = remainingByMember.get(c.memberId) ?? 0
+      if (curRemaining >= c.amount) {
+        paymentsToAdd.push({
+          id: obId,
+          memberId: c.memberId,
+          kind: 'water',
+          refId: m.id,
+          amount: c.amount,
+          paidAt: Date.now(),
+          note: ADVANCE_NOTE,
+        })
+        deductedMemberIds.push(c.memberId)
+        remainingByMember.set(c.memberId, curRemaining - c.amount)
+        paidSet.add(obId)
+      }
+    }
+  }
+
+  return { paymentsToAdd, deductedMemberIds }
 }
 
 export interface MemberDebt {

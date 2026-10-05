@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildObligations } from './logic'
 import Fund from './pages/Fund'
 import Matches from './pages/Matches'
@@ -8,7 +8,7 @@ import SettingsModal from './pages/Settings'
 import Split from './pages/Split'
 import { isDemo, login, logout, store, watchAuth, type AuthState } from './store'
 import { DEFAULT_SETTINGS, type AppData } from './types'
-import { AppCtx, type Ctx, useToast } from './ui'
+import { AppCtx, Btn, Modal, copyText, type Ctx, useToast } from './ui'
 
 const TABS = [
   { id: 'overview', label: 'Tổng quan', icon: '🏠' },
@@ -30,6 +30,7 @@ export default function App() {
   const [tab, setTab] = useState(initialTab)
   const [editMatchId, setEditMatchId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
+  const [authError, setAuthError] = useState<{ code: string; message: string; domain?: string } | null>(null)
   const [toastNode, toast] = useToast()
 
   useEffect(() => store.subscribe((d, r) => (setData(d), setReady(r))), [])
@@ -52,6 +53,34 @@ export default function App() {
     window.scrollTo(0, 0)
   }
 
+  const doLogin = useCallback(() => {
+    login().catch((e: any) => {
+      const code = e?.code || 'unknown'
+      const hostname = window.location.hostname
+      if (code === 'auth/unauthorized-domain') {
+        setAuthError({
+          code,
+          message: 'Tên miền hiện tại chưa được cấp quyền (Authorized Domain) trong Firebase Authentication.',
+          domain: hostname,
+        })
+      } else if (code === 'auth/popup-blocked') {
+        setAuthError({
+          code,
+          message: 'Trình duyệt hoặc khung iFrame đã chặn cửa sổ Popup đăng nhập của Google.',
+          domain: hostname,
+        })
+      } else if (code === 'auth/popup-closed-by-user') {
+        toast('Đã hủy đăng nhập.')
+      } else {
+        setAuthError({
+          code,
+          message: e?.message || String(e),
+          domain: hostname,
+        })
+      }
+    })
+  }, [toast])
+
   const ctx: Ctx = useMemo(
     () => ({
       data,
@@ -59,11 +88,10 @@ export default function App() {
       canEdit: auth.isAdmin,
       memberById: new Map(data.members.map((m) => [m.id, m])),
       toast,
+      login: doLogin,
     }),
-    [data, auth.isAdmin, toast],
+    [data, auth.isAdmin, toast, doLogin],
   )
-
-  const doLogin = () => login().catch((e) => toast('Đăng nhập lỗi: ' + (e?.code ?? e)))
 
   const current = TABS.find((t) => t.id === tab) ?? TABS[0]
 
@@ -187,6 +215,81 @@ export default function App() {
         </nav>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {authError && (
+        <Modal title="Lỗi đăng nhập Thủ quỹ" onClose={() => setAuthError(null)}>
+          <div className="space-y-4 text-sm text-slate-700">
+            {authError.code === 'auth/unauthorized-domain' ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800 font-medium">
+                  ⚠️ Tên miền chưa được thêm vào Authorized Domains của Firebase
+                </div>
+                <p className="text-xs leading-relaxed text-slate-600">
+                  Firebase Authentication chỉ cho phép đăng nhập Google từ các tên miền có trong danh sách được cấp phép của dự án <strong>app-from-ai</strong>.
+                </p>
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-3">
+                  <div className="text-xs font-bold text-slate-600 mb-1">Tên miền hiện tại cần thêm:</div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 rounded-lg bg-white px-2.5 py-1.5 font-mono text-xs text-slate-900 border border-slate-200 truncate select-all">
+                      {authError.domain}
+                    </code>
+                    <Btn
+                      kind="soft"
+                      className="text-xs shrink-0"
+                      onClick={async () => {
+                        await copyText(authError.domain ?? '')
+                        toast('Đã sao chép tên miền!')
+                      }}
+                    >
+                      📋 Copy
+                    </Btn>
+                  </div>
+                </div>
+                <div className="rounded-2xl bg-amber-50 border border-amber-200 p-3 text-xs text-amber-900 space-y-1.5">
+                  <div className="font-bold">Cách thêm tên miền (1 phút):</div>
+                  <ol className="list-decimal pl-4 space-y-1 leading-relaxed">
+                    <li>Vào <a href="https://console.firebase.google.com/" target="_blank" rel="noreferrer" className="underline font-bold text-green-800">Firebase Console</a> → Chọn project <strong>app-from-ai</strong>.</li>
+                    <li>Vào mục <strong>Authentication</strong> → tab <strong>Settings</strong>.</li>
+                    <li>Cuộn xuống mục <strong>Authorized domains</strong> → bấm <strong>Add domain</strong>.</li>
+                    <li>Dán tên miền ở trên vào và bấm <strong>Done</strong>. Sau đó quay lại đây bấm đăng nhập lại.</li>
+                  </ol>
+                </div>
+              </div>
+            ) : authError.code === 'auth/popup-blocked' ? (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-200 bg-amber-50 p-3 text-amber-800 font-medium">
+                  ⚠️ Trình duyệt chặn cửa sổ Popup đăng nhập
+                </div>
+                <p className="text-xs text-slate-600 leading-relaxed">
+                  Cửa sổ đăng nhập Google bị trình duyệt chặn. Bạn có thể mở trực tiếp ứng dụng trong một tab mới của trình duyệt để đăng nhập bình thường:
+                </p>
+                <div className="text-center pt-2">
+                  <a
+                    href={window.location.href}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-block rounded-xl bg-green-700 px-4 py-2 text-xs font-semibold text-white shadow-sm hover:bg-green-800"
+                  >
+                    ↗ Mở ứng dụng trong tab mới
+                  </a>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-red-800 font-medium">
+                  Mã lỗi: {authError.code}
+                </div>
+                <p className="text-xs text-slate-600">{authError.message}</p>
+              </div>
+            )}
+
+            <div className="pt-2 text-right">
+              <Btn onClick={() => setAuthError(null)} className="text-xs px-4 py-2">
+                Đóng
+              </Btn>
+            </div>
+          </div>
+        </Modal>
+      )}
       {toastNode}
     </AppCtx.Provider>
   )

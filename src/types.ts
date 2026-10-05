@@ -18,6 +18,12 @@ export interface Member {
   /** Mức đóng quỹ tháng riêng của người này (sếp 500k–1tr, anh em 100k…) */
   monthlyFee: number
   createdAt: number
+  /** Tiền ứng trước (tiền nộp trước để trừ dần khi thua trận) */
+  advanceAmount?: number
+  /** Ngày ứng tiền (YYYY-MM-DD) */
+  advanceDate?: string
+  /** Ghi chú nộp tiền ứng (ví dụ: chuyển khoản, gửi tiền mặt...) */
+  advanceNote?: string
 }
 
 export interface Charge {
@@ -33,6 +39,10 @@ export interface Match {
   teamB: string[]
   scoreA: number | null
   scoreB: number | null
+  /** Đá luân lưu penalty khi hòa tỉ số */
+  penaltyWinner?: 'A' | 'B' | null
+  penaltyScoreA?: number | null
+  penaltyScoreB?: number | null
   /** Tiền phạt mỗi người đội thua — chụp lại lúc tạo trận để đổi cài đặt không làm sai sổ cũ */
   waterFee: number
   drawRule: DrawRule
@@ -106,7 +116,7 @@ export interface AppData {
 }
 
 export const DEFAULT_SETTINGS: Settings = {
-  teamName: 'Đội bóng',
+  teamName: 'FC Kỹ thuật - An toàn & friends',
   waterFee: 20000,
   monthlyFee: 100000,
   drawRule: 'half',
