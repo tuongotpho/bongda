@@ -8,15 +8,16 @@ import SettingsModal from './pages/Settings'
 import Split from './pages/Split'
 import { isDemo, login, logout, store, watchAuth, type AuthState } from './store'
 import { DEFAULT_SETTINGS, type AppData } from './types'
+import { Icon, type IconName } from './icons'
 import { AppCtx, Btn, Modal, copyText, type Ctx, useToast } from './ui'
 
-const TABS = [
-  { id: 'overview', label: 'Tổng quan', icon: '🏠' },
-  { id: 'split', label: 'Chia đội', icon: '🎲' },
-  { id: 'matches', label: 'Trận đấu', icon: '⚽' },
-  { id: 'fund', label: 'Quỹ', icon: '💰' },
-  { id: 'members', label: 'Thành viên', icon: '👥' },
-] as const
+const TABS: { id: string; label: string; icon: IconName }[] = [
+  { id: 'overview', label: 'Tổng quan', icon: 'home' },
+  { id: 'split', label: 'Chia đội', icon: 'shuffle' },
+  { id: 'matches', label: 'Trận đấu', icon: 'ball' },
+  { id: 'fund', label: 'Quỹ', icon: 'wallet' },
+  { id: 'members', label: 'Thành viên', icon: 'users' },
+]
 
 const initialTab = () => {
   const h = location.hash.slice(1)
@@ -97,12 +98,19 @@ export default function App() {
 
   const authButtons = !isDemo &&
     (auth.user ? (
-      <button onClick={() => logout()} className="rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-white/10" title={auth.user.email ?? undefined}>
-        Đăng xuất
+      <button
+        onClick={() => logout()}
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl px-3 py-2 text-sm font-medium transition hover:bg-white/10"
+        title={auth.user.email ?? undefined}
+      >
+        <Icon name="logout" className="h-4 w-4" /> Đăng xuất
       </button>
     ) : (
-      <button onClick={doLogin} className="rounded-xl bg-white/10 px-3 py-2 text-sm font-medium ring-1 ring-white/20 transition hover:bg-white/20">
-        Thủ quỹ đăng nhập
+      <button
+        onClick={doLogin}
+        className="flex cursor-pointer items-center justify-center gap-2 rounded-xl bg-white/10 px-3 py-2 text-sm font-semibold ring-1 ring-white/20 transition hover:bg-white/20"
+      >
+        <Icon name="login" className="h-4 w-4" /> Thủ quỹ đăng nhập
       </button>
     ))
 
@@ -110,12 +118,14 @@ export default function App() {
     <AppCtx.Provider value={ctx}>
       <div className="min-h-screen lg:pl-64">
         {/* Sidebar (desktop) */}
-        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-gradient-to-b from-green-800 via-green-900 to-emerald-950 text-white lg:flex">
-          <div className="flex items-center gap-3 px-6 py-6">
-            <div className="grid h-11 w-11 place-items-center rounded-2xl bg-white/10 text-2xl ring-1 ring-white/20">⚽</div>
+        <aside className="fixed inset-y-0 left-0 z-30 hidden w-64 flex-col bg-gradient-to-b from-green-900 to-emerald-950 text-white lg:flex">
+          <div className="flex items-center gap-3 px-5 py-6">
+            <div className="grid h-11 w-11 shrink-0 place-items-center rounded-2xl bg-white text-green-800 shadow-lg shadow-black/20">
+              <Icon name="ball" className="h-6 w-6" strokeWidth={1.6} />
+            </div>
             <div className="min-w-0">
-              <div className="truncate text-base font-bold leading-tight">{data.settings.teamName}</div>
-              <div className="text-xs text-green-200/80">Quản lý đội bóng</div>
+              <div className="line-clamp-2 text-[15px] leading-snug font-bold">{data.settings.teamName}</div>
+              <div className="mt-0.5 text-xs text-green-200/70">Quản lý đội bóng</div>
             </div>
           </div>
           <nav className="flex-1 space-y-1 px-3">
@@ -125,11 +135,11 @@ export default function App() {
                 <button
                   key={t.id}
                   onClick={() => go(t.id)}
-                  className={`group flex w-full items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
-                    on ? 'bg-white text-green-900 shadow-lg shadow-black/20' : 'text-green-100/90 hover:bg-white/10 hover:text-white'
+                  className={`flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-2.5 text-left text-sm font-medium transition ${
+                    on ? 'bg-white/15 text-white ring-1 ring-white/15' : 'text-green-100/75 hover:bg-white/5 hover:text-white'
                   }`}
                 >
-                  <span className={`text-lg transition ${on ? '' : 'group-hover:scale-110'}`}>{t.icon}</span>
+                  <Icon name={t.icon} className={`h-5 w-5 ${on ? 'text-green-300' : ''}`} />
                   {t.label}
                 </button>
               )
@@ -138,7 +148,7 @@ export default function App() {
           <div className="space-y-2 border-t border-white/10 p-4">
             {auth.isAdmin && (
               <button onClick={() => setShowSettings(true)} className="flex w-full items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium text-green-100/90 transition hover:bg-white/10">
-                <span className="text-lg">⚙️</span> Cài đặt
+                <Icon name="settings" className="h-5 w-5" /> Cài đặt
               </button>
             )}
             {auth.user && <div className="truncate px-3 text-xs text-green-200/70">{auth.user.email}</div>}
@@ -147,13 +157,21 @@ export default function App() {
         </aside>
 
         {/* Header (mobile) */}
-        <header className="sticky top-0 z-30 bg-gradient-to-r from-green-800 to-emerald-700 px-4 py-3 text-white shadow-md lg:hidden">
+        <header className="sticky top-0 z-30 bg-green-800 px-4 pt-[max(0.625rem,env(safe-area-inset-top))] pb-2.5 text-white shadow-md lg:hidden">
           <div className="flex items-center justify-between gap-2">
-            <h1 className="truncate text-lg font-bold">⚽ {data.settings.teamName}</h1>
-            <div className="flex shrink-0 items-center gap-1">
+            <div className="flex min-w-0 items-center gap-2.5">
+              <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl bg-white text-green-800">
+                <Icon name="ball" className="h-5 w-5" strokeWidth={1.6} />
+              </span>
+              <div className="min-w-0 leading-tight">
+                <div className="truncate text-[15px] font-bold">{data.settings.teamName}</div>
+                <div className="text-[11px] text-green-100/80">{current.label}</div>
+              </div>
+            </div>
+            <div className="flex shrink-0 items-center gap-1 [&>button]:px-2.5 [&>button]:text-xs">
               {auth.isAdmin && (
-                <button onClick={() => setShowSettings(true)} className="rounded-xl px-2 py-1.5 hover:bg-white/10" aria-label="Cài đặt">
-                  ⚙️
+                <button onClick={() => setShowSettings(true)} className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl hover:bg-white/10" aria-label="Cài đặt">
+                  <Icon name="settings" className="h-5 w-5" />
                 </button>
               )}
               {authButtons}
@@ -176,9 +194,7 @@ export default function App() {
           <div className="mb-6 hidden items-end justify-between lg:flex">
             <div>
               <p className="text-xs font-semibold tracking-widest text-green-700 uppercase">{data.settings.teamName}</p>
-              <h1 className="mt-1 text-3xl font-extrabold tracking-tight text-slate-900">
-                {current.icon} {current.label}
-              </h1>
+              <h1 className="mt-1 text-[28px] font-extrabold tracking-tight text-slate-900">{current.label}</h1>
             </div>
           </div>
           <div key={tab} className="animate-fade-up">
@@ -199,18 +215,24 @@ export default function App() {
         </main>
 
         {/* Bottom tabs (mobile) */}
-        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
-          <div className="grid grid-cols-5">
-            {TABS.map((t) => (
-              <button
-                key={t.id}
-                onClick={() => go(t.id)}
-                className={`flex flex-col items-center gap-0.5 py-2 text-[11px] ${tab === t.id ? 'font-semibold text-green-700' : 'text-slate-500'}`}
-              >
-                <span className={`text-lg leading-none transition ${tab === t.id ? 'scale-110' : ''}`}>{t.icon}</span>
-                {t.label}
-              </button>
-            ))}
+        <nav className="fixed inset-x-0 bottom-0 z-30 border-t border-slate-200/80 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur lg:hidden">
+          <div className="grid grid-cols-5 px-1">
+            {TABS.map((t) => {
+              const on = tab === t.id
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => go(t.id)}
+                  aria-current={on ? 'page' : undefined}
+                  className={`flex cursor-pointer flex-col items-center gap-1 pt-2 pb-1.5 text-[11px] transition ${on ? 'font-semibold text-green-800' : 'text-slate-500'}`}
+                >
+                  <span className={`grid h-7 w-12 place-items-center rounded-full transition ${on ? 'bg-green-100' : ''}`}>
+                    <Icon name={t.icon} className="h-5 w-5" strokeWidth={on ? 2.1 : 1.8} />
+                  </span>
+                  {t.label}
+                </button>
+              )
+            })}
           </div>
         </nav>
       </div>

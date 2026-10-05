@@ -4,6 +4,7 @@ import { type LineupImageParams } from '../lineupImage'
 import { deleteMatch, saveMatch, setPaid } from '../actions'
 import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
+import { Icon } from '../icons'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
 
 export default function Matches({ go }: { go: (tab: string, id?: string) => void }) {
@@ -33,113 +34,100 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
   return (
     <div className="space-y-6">
       <Card
-        title={
-          <div className="flex flex-wrap items-baseline gap-2">
-            <span>Lịch sử các trận đấu</span>
-            <span className="text-xs font-normal text-slate-500">
-              ({data.matches.length} trận · Đội A thắng {record.a} · Đội B thắng {record.b} · Hoà {record.d})
-            </span>
-          </div>
-        }
+        title="Lịch sử trận đấu"
+        subtitle={`${data.matches.length} trận · A thắng ${record.a} · B thắng ${record.b} · Hoà ${record.d}`}
         right={
           canEdit && (
-            <Btn kind="soft" onClick={() => go('split')} className="px-3 py-1.5 text-xs">
-              + Chia đội trận mới
+            <Btn kind="soft" onClick={() => go('split')} className="px-2.5 py-1.5 text-xs">
+              <Icon name="shuffle" className="h-3.5 w-3.5" /> Chia đội trận mới
             </Btn>
           )
         }
       >
         {!sorted.length ? (
           <div className="py-12 text-center">
-            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-3xl">⚽</div>
+            <div className="mx-auto mb-3 grid h-14 w-14 place-items-center rounded-2xl bg-green-50 text-green-700">
+              <Icon name="ball" className="h-7 w-7" />
+            </div>
             <h3 className="text-base font-bold text-slate-800">Chưa có trận đấu nào</h3>
-            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">
-              Vào tab "Chia đội" để xếp 2 đội hình cho trận đấu đầu tiên.
-            </p>
+            <p className="mx-auto mt-1 max-w-md text-sm text-slate-500">Vào tab "Chia đội" để xếp 2 đội hình cho trận đấu đầu tiên.</p>
             <div className="mt-4">
-              <Btn onClick={() => go('split')}>🎲 Chia đội ngay</Btn>
+              <Btn onClick={() => go('split')}>Chia đội ngay</Btn>
             </div>
           </div>
         ) : (
-          <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+          <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
             {sorted.map((m) => {
               const o = matchOutcome(m)
               const obs = obligations.filter((x) => x.kind === 'water' && x.refId === m.id)
               const unpaid = obs.filter((x) => !x.paid).length
               const unpaidAmount = obs.filter((x) => !x.paid).reduce((s, x) => s + x.amount, 0)
+              const pen = isPenaltyDecided(m)
+              const badge =
+                o === 'pending' && !m.charges
+                  ? { text: 'Chưa có tỉ số', cls: 'bg-amber-100 text-amber-800' }
+                  : m.charges
+                    ? { text: 'Sổ cũ', cls: 'bg-slate-100 text-slate-600' }
+                    : o === 'draw'
+                      ? { text: 'Hoà', cls: 'bg-slate-100 text-slate-700' }
+                      : { text: `Đội ${o} thắng${pen ? ' pen' : ''}`, cls: o === 'A' ? 'bg-sky-100 text-sky-800' : 'bg-orange-100 text-orange-800' }
+              const team = (k: 'A' | 'B') => {
+                const ids = (k === 'A' ? m.teamA : m.teamB) ?? []
+                const score = k === 'A' ? m.scoreA : m.scoreB
+                const lost = o !== 'pending' && o !== 'draw' && o !== k
+                return (
+                  <div className={`flex items-center gap-2.5 ${lost ? 'opacity-55' : ''}`}>
+                    <span className={`h-6 w-1 shrink-0 rounded-full ${k === 'A' ? 'bg-sky-500' : 'bg-orange-500'}`} />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-sm font-semibold text-slate-800">
+                        Đội {k} <span className="font-normal text-slate-400">· {ids.length} người</span>
+                      </div>
+                      <div className="truncate text-[11px] text-slate-500">{ids.map((id) => name(ctx, id)).join(', ')}</div>
+                    </div>
+                    <span className="w-7 text-right text-2xl font-black text-slate-900">{score ?? '–'}</span>
+                  </div>
+                )
+              }
               return (
-                <li key={m.id}>
+                <li key={m.id} className="min-w-0">
                   <button
                     onClick={() => setOpenId(m.id)}
-                    className="flex h-full w-full flex-col justify-between gap-3 rounded-2xl border border-slate-100 bg-slate-50/60 p-4 text-left transition hover:-translate-y-0.5 hover:border-green-300 hover:bg-white hover:shadow-md"
+                    className="flex h-full w-full min-w-0 cursor-pointer flex-col gap-3 rounded-2xl border border-slate-200/80 bg-white p-4 text-left transition hover:border-green-300 hover:shadow-md"
                   >
-                    <div>
-                      <div className="flex items-center justify-between text-xs text-slate-500">
-                        <span className="font-semibold text-slate-700">📅 {fmtDate(m.date)}</span>
-                        {o === 'pending' && !m.charges ? (
-                          <span className="rounded-full bg-amber-100 px-2 py-0.5 font-bold text-amber-800">
-                            Chưa có tỉ số
-                          </span>
-                        ) : isPenaltyDecided(m) ? (
-                          <span className="rounded-full bg-emerald-100 px-2 py-0.5 font-bold text-emerald-800">
-                            Đội {o} thắng Pen ⚽
-                          </span>
-                        ) : o === 'draw' ? (
-                          <span className="rounded-full bg-slate-200 px-2 py-0.5 font-bold text-slate-700">
-                            Hoà
-                          </span>
-                        ) : (
-                          <span className="rounded-full bg-green-100 px-2 py-0.5 font-bold text-green-800">
-                            Đội {o} thắng 🏆
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="mt-2 text-xl font-black tracking-tight text-slate-900">
-                        {m.charges ? (
-                          <span className="text-sm font-medium text-slate-600">
-                            Sổ cũ · {m.charges.length} người bị phạt
-                          </span>
-                        ) : (
-                          <div className="flex flex-wrap items-baseline gap-1.5">
-                            <span className="text-sky-700">🟦 {m.scoreA ?? '?'}</span>
-                            <span className="text-slate-400">–</span>
-                            <span className="text-orange-700">{m.scoreB ?? '?'} 🟧</span>
-                            {isPenaltyDecided(m) && (
-                              <span className="text-xs font-bold text-emerald-700 ml-1">
-                                {m.penaltyScoreA != null && m.penaltyScoreB != null
-                                  ? `(Pen ${m.penaltyScoreA}-${m.penaltyScoreB})`
-                                  : `(Pen: Đội ${getPenaltyWinner(m)} thắng)`}
-                              </span>
-                            )}
-                          </div>
-                        )}
-                      </div>
-
-                      {!m.charges && (
-                        <div className="mt-2 grid grid-cols-2 gap-1.5 rounded-xl bg-white/80 p-2 text-[11px] text-slate-600 ring-1 ring-slate-100">
-                          <div className="truncate font-medium text-sky-800">
-                            🟦 A ({m.teamA.length}): {m.teamA.slice(0, 2).map((id) => name(ctx, id)).join(', ')}
-                            {m.teamA.length > 2 && '...'}
-                          </div>
-                          <div className="truncate font-medium text-orange-800">
-                            🟧 B ({m.teamB.length}): {m.teamB.slice(0, 2).map((id) => name(ctx, id)).join(', ')}
-                            {m.teamB.length > 2 && '...'}
-                          </div>
-                        </div>
-                      )}
+                    <div className="flex w-full items-center justify-between text-xs">
+                      <span className="font-semibold text-slate-600">{fmtDate(m.date)}</span>
+                      <span className={`rounded-full px-2 py-0.5 font-semibold ${badge.cls}`}>{badge.text}</span>
                     </div>
 
-                    <div className="border-t border-slate-100 pt-2 text-xs">
+                    {m.charges ? (
+                      <div className="text-sm text-slate-600">Nhập từ sổ cũ · {m.charges.length} người bị phạt</div>
+                    ) : (
+                      <div className="w-full space-y-2">
+                        {team('A')}
+                        {team('B')}
+                        {pen && (
+                          <div className="text-[11px] font-semibold text-emerald-700">
+                            {m.penaltyScoreA != null && m.penaltyScoreB != null
+                              ? `Luân lưu ${m.penaltyScoreA}–${m.penaltyScoreB}`
+                              : `Đội ${getPenaltyWinner(m)} thắng luân lưu`}
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    <div className="mt-auto w-full border-t border-slate-100 pt-2.5 text-xs">
                       {!obs.length ? (
                         <span className="text-slate-400">Không phát sinh tiền phạt</span>
                       ) : unpaid > 0 ? (
-                        <span className="font-semibold text-red-600">
-                          ⚠️ {unpaid}/{obs.length} người chưa nộp phạt ({money(unpaidAmount)})
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="font-medium text-slate-600">
+                            Chưa nộp {unpaid}/{obs.length}
+                          </span>
+                          <span className="font-bold text-red-600">{money(unpaidAmount)}</span>
                         </span>
                       ) : (
-                        <span className="font-semibold text-green-700">
-                          ✓ Đã thu đủ tiền nước ({obs.length} người)
+                        <span className="flex items-center gap-1 font-semibold text-green-700">
+                          <Icon name="check" className="h-3.5 w-3.5" strokeWidth={2.5} /> Đã thu đủ ({obs.length} người)
                         </span>
                       )}
                     </div>

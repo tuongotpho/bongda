@@ -9,13 +9,16 @@ html {
 }
 body {
   font-family: var(--font-sans);
+  /* số tiền thẳng cột, không nhảy chữ khi đổi giá trị */
+  font-variant-numeric: tabular-nums;
   color: #0f172a;
-  background:
-    radial-gradient(1200px 500px at 100% -10%, rgb(187 247 208 / 0.45), transparent 60%),
-    radial-gradient(900px 400px at -10% 110%, rgb(186 230 253 / 0.35), transparent 60%),
-    #f4f6f5;
-  background-attachment: fixed;
+  background: #f3f5f4;
   min-height: 100vh;
+}
+
+:focus-visible {
+  outline: 2px solid #15803d;
+  outline-offset: 2px;
 }
 
 @keyframes fade-up {
@@ -30,4 +33,25 @@ body {
 }
 .animate-fade-up {
   animation: fade-up 0.25s ease-out both;
+}
+
+@keyframes sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.animate-sheet-up {
+  animation: sheet-up 0.28s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-sheet-up {
+    animation: none;
+  }
 }
