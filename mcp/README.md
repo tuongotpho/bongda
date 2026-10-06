@@ -55,6 +55,23 @@ npm ci --prefix F:\AI\bongda\mcp
   ```
   rồi khởi động lại Claude Desktop.
 
+## Dùng trên nhiều máy — mỗi máy một khoá riêng
+
+Đừng chép một file khoá sang nhiều máy (qua Zalo, email, USB…): lộ một nơi là phải thu hồi ở mọi nơi.
+Thay vào đó, mỗi máy có **khoá riêng** của cùng service account `mcp-bongda` (tối đa 10 khoá):
+
+1. https://console.cloud.google.com/iam-admin/serviceaccounts?project=app-from-ai → bấm `mcp-bongda` → **Keys** → **Add key** → **JSON**.
+   Tải **ngay trên máy cần dùng**. Ghi lại *Key ID* + tên máy (vd. `may-co-quan`) để biết khoá nào của máy nào.
+2. Chuyển file vào thư mục người dùng của máy đó, **ngoài thư mục dự án**, vd. `C:\Users\<tên-user>\.secrets\bongda-mcp.json`.
+3. Trỏ server tới khoá (một lần cho mỗi máy), rồi **thoát hẳn và mở lại** Claude:
+   ```
+   setx BONGDA_MCP_KEY "C:\Users\<tên-user>\.secrets\bongda-mcp.json"
+   ```
+   (Đường dẫn mặc định trong `.mcp.json` là của máy ở nhà — máy khác phải đặt biến này.)
+4. Thử: nhờ Claude gọi `tong_quan`. Thiếu/sai khoá thì nút báo rõ đường dẫn đang tìm.
+
+Máy bị mất / không dùng nữa → vào **Keys** của `mcp-bongda`, xoá đúng Key ID của máy đó. Các máy khác vẫn chạy bình thường.
+
 ## Thử không đụng dữ liệu thật
 ```
 firebase emulators:start --only firestore --project demo-bongda
