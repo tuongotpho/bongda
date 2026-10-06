@@ -11,6 +11,7 @@ import { DEFAULT_SETTINGS, type AppData } from './types'
 import InstallBanner from './InstallBanner'
 import { Icon, type IconName } from './icons'
 import { AppCtx, Btn, Modal, copyText, type Ctx, useToast } from './ui'
+import { DialogHost } from './dialog'
 
 const TABS: { id: string; label: string; icon: IconName }[] = [
   { id: 'overview', label: 'Tổng quan', icon: 'home' },
@@ -371,6 +372,7 @@ export default function App() {
         </Modal>
       )}
       {toastNode}
+      <DialogHost />
     </AppCtx.Provider>
   )
 }

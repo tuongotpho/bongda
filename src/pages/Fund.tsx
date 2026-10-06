@@ -4,6 +4,7 @@ import { advanceHeld, fmtDate, fmtMonth, fundSummary, money, newId, obligationId
 import { store } from '../store'
 import { FUND_NAMES, type Expense, type FundId, type FundMonth, type Income } from '../types'
 import { Icon } from '../icons'
+import { confirmDialog } from '../dialog'
 import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, name, useApp } from '../ui'
 import { PayToggle } from './Matches'
 
@@ -143,7 +144,16 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
 
   const exempt = async (memberId: string) => {
     const ob = obs.find((o) => o.memberId === memberId)
-    if (ob?.paid && !confirm('Người này đã đóng. Miễn sẽ xoá khoản đã thu khỏi sổ. Tiếp tục?')) return
+    if (
+      ob?.paid &&
+      !(await confirmDialog({
+        title: `Miễn quỹ cho ${name(ctx, memberId)}?`,
+        message: 'Người này đã đóng tiền tháng này. Miễn sẽ xoá khoản đã thu khỏi sổ.',
+        confirmText: 'Miễn',
+        tone: 'warning',
+      }))
+    )
+      return
     const amounts = { ...mo.amounts }
     delete amounts[memberId]
     await store.put('months', mo.id, { ...mo, amounts })
@@ -152,7 +162,15 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
   const add = (memberId: string) =>
     store.put('months', mo.id, { ...mo, amounts: { ...mo.amounts, [memberId]: ctx.memberById.get(memberId)?.monthlyFee ?? data.settings.monthlyFee } })
   const del = async () => {
-    if (!confirm(`Xoá quỹ ${fmtMonth(mo.id)}? Mọi khoản đã thu của tháng này sẽ bị xoá khỏi sổ.`)) return
+    if (
+      !(await confirmDialog({
+        title: `Xoá quỹ ${fmtMonth(mo.id)}?`,
+        message: 'Mọi khoản đã thu của tháng này sẽ bị xoá khỏi sổ. Không hoàn tác được.',
+        confirmText: 'Xoá quỹ',
+        danger: true,
+      }))
+    )
+      return
     await deleteMonth(mo.id, data.payments)
     onClose()
     toast('Đã xoá')
@@ -255,7 +273,14 @@ function Ledger() {
                   <Btn
                     kind="danger"
                     className="px-2 py-1 text-xs"
-                    onClick={() => confirm(`Xoá "${r.x.note}"?`) && store.remove(r.kind === 'in' ? 'incomes' : 'expenses', r.x.id)}
+                    onClick={async () =>
+                      (await confirmDialog({
+                        title: `Xoá khoản ${r.kind === 'in' ? 'ủng hộ' : 'chi'}?`,
+                        message: `"${r.x.note}" · ${money(r.x.amount)}`,
+                        confirmText: 'Xoá',
+                        danger: true,
+                      })) && store.remove(r.kind === 'in' ? 'incomes' : 'expenses', r.x.id)
+                    }
                   >
                     Xoá
                   </Btn>

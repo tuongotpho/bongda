@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { money, todayISO } from '../logic'
 import { store } from '../store'
 import type { AppData, DrawRule } from '../types'
+import { confirmDialog } from '../dialog'
 import { Btn, Field, Modal, inputCls, useApp } from '../ui'
 
 export default function SettingsModal({ onClose }: { onClose: () => void }) {
@@ -34,9 +35,16 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
       return toast('File không đúng định dạng: ' + (e as Error).message)
     }
     const summary = `${d.members.length} thành viên, ${d.matches?.length ?? 0} trận, ${d.months.length} tháng quỹ, ${d.payments?.length ?? 0} lượt đóng tiền`
-    if (!confirm(`Nạp file "${file.name}" (${summary})?
-
-TOÀN BỘ dữ liệu hiện tại sẽ bị THAY THẾ. Nên tải bản sao lưu trước.`)) return
+    if (
+      !(await confirmDialog({
+        title: 'Nạp dữ liệu từ file?',
+        message: `"${file.name}" — ${summary}`,
+        details: ['TOÀN BỘ dữ liệu hiện tại sẽ bị THAY THẾ', 'Bản sao lưu dữ liệu hiện tại sẽ được tự tải về trước'],
+        confirmText: 'Thay thế',
+        danger: true,
+      }))
+    )
+      return
     try {
       backup() // tự tải bản sao lưu dữ liệu hiện tại trước khi thay thế
       await store.replaceAll(d)

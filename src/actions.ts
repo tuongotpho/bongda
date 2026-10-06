@@ -1,4 +1,5 @@
 import { fmtDate, isLocked, money, planMatchSave } from './logic'
+import { alertDialog, confirmDialog } from './dialog'
 import { store } from './store'
 import type { AppData, Match, Obligation, Payment } from './types'
 
@@ -17,17 +18,24 @@ export async function saveMatch(next: Match, data: AppData, deductAdvance = fals
   // Chốt chặn chung: trận đã có kết quả (hoặc sổ cũ) thì không sửa nữa, dù gọi từ màn hình nào
   const prev = data.matches.find((x) => x.id === next.id)
   if (prev && isLocked(prev)) {
-    alert(`Trận ${fmtDate(prev.date)} ${prev.charges ? 'nhập từ sổ cũ' : 'đã chốt kết quả'} nên KHÔNG sửa được. Nhập nhầm thì xoá trận này rồi chia đội tạo trận mới.`)
+    await alertDialog({
+      title: `Trận ${fmtDate(prev.date)} đã khoá`,
+      message: `Trận này ${prev.charges ? 'nhập từ sổ cũ' : 'đã chốt kết quả'} nên không sửa được nữa. Nhập nhầm thì xoá trận rồi chia đội tạo trận mới.`,
+      tone: 'warning',
+    })
     return null
   }
   const plan = planMatchSave(next, data, deductAdvance)
   if (plan.staleCash.length) {
     const total = plan.staleCash.reduce((s, p) => s + p.amount, 0)
-    const ok = confirm(
-      `Thay đổi này làm ${plan.staleCash.length} khoản tiền phạt ĐÃ THU (${money(total)}) không còn khớp ` +
-        `(người đó không còn phải nộp, hoặc mức phạt đổi khi chuyển thắng ↔ hoà).\n\n` +
-        `Các khoản này sẽ được gỡ khỏi sổ quỹ — nếu người đó vẫn phải nộp thì gạch lại "Đã đóng" sau. Tiếp tục?`,
-    )
+    const ok = await confirmDialog({
+      title: `Gỡ ${plan.staleCash.length} khoản đã thu (${money(total)})?`,
+      message:
+        'Thay đổi này làm các khoản tiền phạt đã thu không còn khớp (người đó không còn phải nộp, hoặc mức phạt đổi khi chuyển thắng ↔ hoà).',
+      details: ['Các khoản này sẽ được gỡ khỏi sổ quỹ', 'Nếu người đó vẫn phải nộp thì gạch lại "Đã đóng" sau'],
+      confirmText: 'Gỡ và lưu',
+      tone: 'warning',
+    })
     if (!ok) return null
   }
   await store.put('matches', next.id, next)

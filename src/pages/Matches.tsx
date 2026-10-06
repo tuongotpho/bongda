@@ -4,6 +4,7 @@ import { deleteMatch, saveMatch, setPaid } from '../actions'
 import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isLocked, isPenaltyDecided, matchOutcome, outcomeLabel, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
 import { Icon } from '../icons'
+import { confirmDialog } from '../dialog'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
 
 // Phần xuất ảnh chỉ tải khi bấm nút — app mở nhanh hơn
@@ -237,7 +238,15 @@ function MatchModal({
       return
     }
     const pName = name(ctx, id)
-    if (!confirm(`Xoá cầu thủ "${pName}" khỏi trận ngày ${fmtDate(m.date)}?`)) return
+    if (
+      !(await confirmDialog({
+        title: `Bỏ ${pName} khỏi trận?`,
+        message: `Cầu thủ sẽ bị xoá khỏi đội hình trận ngày ${fmtDate(m.date)}.`,
+        confirmText: 'Bỏ khỏi trận',
+        danger: true,
+      }))
+    )
+      return
     const nextA = m.teamA.filter((x) => x !== id)
     const nextB = m.teamB.filter((x) => x !== id)
     if (!(await saveMatch({ ...m, teamA: nextA, teamB: nextB }, ctx.data))) return
@@ -297,7 +306,16 @@ function MatchModal({
       (scored ? `${a} – ${b}: ` : '') +
       (tied ? `Hoà${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}` : `Đội ${out} thắng`) +
       (out === 'draw' ? '' : ` — đội ${out === 'A' ? 'B' : 'A'} nộp phạt`)
-    if (!confirm(`Chốt kết quả: ${summary}?\n\nSau khi chốt KHÔNG sửa được nữa. Nhập nhầm thì phải xoá trận và chia đội tạo trận mới.`)) return
+    if (
+      !(await confirmDialog({
+        title: 'Chốt kết quả trận?',
+        message: summary,
+        details: ['Sau khi chốt KHÔNG sửa được nữa', 'Nhập nhầm thì phải xoá trận và chia đội tạo trận mới'],
+        confirmText: 'Chốt kết quả',
+        tone: 'primary',
+      }))
+    )
+      return
 
     const deducted = await saveMatch(updatedMatch, ctx.data, decided)
     if (!deducted) return
@@ -384,11 +402,14 @@ function MatchModal({
   const del = async () => {
     const paidCount = ctx.data.payments.filter((p) => p.kind === 'water' && p.refId === m.id).length
     if (
-      !confirm(
-        `Xoá trận ${fmtDate(m.date)}?${
-          paidCount ? `\n${paidCount} khoản tiền phạt đã thu của trận này cũng sẽ bị xoá khỏi sổ quỹ.` : ''
-        }`,
-      )
+      !(await confirmDialog({
+        title: `Xoá trận ${fmtDate(m.date)}?`,
+        message: paidCount
+          ? `${paidCount} khoản tiền phạt đã thu của trận này cũng sẽ bị xoá khỏi sổ quỹ.`
+          : 'Đội hình và kết quả trận sẽ bị xoá. Không hoàn tác được.',
+        confirmText: 'Xoá trận',
+        danger: true,
+      }))
     )
       return
     await deleteMatch(m.id, ctx.data.payments)

@@ -4,6 +4,7 @@ import { isLocked, fmtDate, matchOutcome, outcomeLabel, money, newId, splitTeams
 import { saveMatch } from '../actions'
 import type { Match } from '../types'
 import { Icon } from '../icons'
+import { confirmDialog } from '../dialog'
 import { Btn, Card, Empty, Field, Modal, copyText, inputCls, name, useApp } from '../ui'
 
 // Phần xuất ảnh chỉ tải khi bấm nút — app mở nhanh hơn
@@ -627,7 +628,15 @@ function PastMatchDetailModal({
       return
     }
     const pName = name(ctx, id)
-    if (!confirm(`Xoá cầu thủ "${pName}" khỏi trận ngày ${fmtDate(match.date)}?`)) return
+    if (
+      !(await confirmDialog({
+        title: `Bỏ ${pName} khỏi trận?`,
+        message: `Cầu thủ sẽ bị xoá khỏi đội hình trận ngày ${fmtDate(match.date)}.`,
+        confirmText: 'Bỏ khỏi trận',
+        danger: true,
+      }))
+    )
+      return
     const nextA = match.teamA.filter((x) => x !== id)
     const nextB = match.teamB.filter((x) => x !== id)
     const nextMatch: Match = { ...match, teamA: nextA, teamB: nextB }
