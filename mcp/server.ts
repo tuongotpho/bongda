@@ -10,7 +10,7 @@
  *   FIRESTORE_EMULATOR_HOST         (khi test) trỏ vào emulator thay vì dữ liệu thật
  * Mỗi lần ghi được chép vào mcp/audit.log (một dòng JSON / lần).
  */
-import { appendFileSync } from 'node:fs'
+import { appendFileSync, existsSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
@@ -28,6 +28,17 @@ const AUDIT = join(dirname(fileURLToPath(import.meta.url)), 'audit.log')
 const COLLS = ['members', 'matches', 'months', 'payments', 'expenses', 'incomes'] as const
 
 if (DATABASE === '(default)') throw new Error('Không dùng database (default) — project app-from-ai dùng chung với app khác.')
+
+// Thư viện Google ném thêm lỗi "lạc" (không gắn với lời gọi nào) khi khoá sai/thiếu → đừng để cả server chết,
+// nếu không Claude chỉ thấy "Connection closed" ở mọi nút sau đó
+process.on('unhandledRejection', (e) => console.error('[bongda] lỗi nền:', (e as Error)?.message ?? e))
+
+// Thiếu file khoá thì báo rõ cách sửa ngay ở nút đầu tiên, không gọi Firestore
+const KEY = process.env.GOOGLE_APPLICATION_CREDENTIALS
+const KEY_PROBLEM =
+  !process.env.FIRESTORE_EMULATOR_HOST && KEY && !existsSync(KEY)
+    ? `Không thấy file khoá service account: ${KEY}. Đặt biến môi trường BONGDA_MCP_KEY trỏ tới file khoá (xem mcp/README.md) rồi khởi động lại Claude.`
+    : null
 
 // Chạy với emulator: không cần dò máy chủ Google (bỏ cảnh báo MetadataLookupWarning)
 if (process.env.FIRESTORE_EMULATOR_HOST) process.env.METADATA_SERVER_DETECTION = 'none'
@@ -163,6 +174,7 @@ for (const [name, t] of Object.entries(tools)) {
       annotations: { readOnlyHint: !t.write, destructiveHint: t.write, idempotentHint: !t.write, openWorldHint: false },
     },
     async (args: Record<string, unknown>) => {
+      if (KEY_PROBLEM) return { content: [{ type: 'text' as const, text: KEY_PROBLEM }], isError: true }
       try {
         const res = t.run(args ?? {}, await load())
         if (res.ops?.length) {
