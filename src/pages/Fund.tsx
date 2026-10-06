@@ -62,9 +62,7 @@ export default function Fund() {
       <div className="grid items-start gap-6 xl:grid-cols-2">
       <MonthsCard paidSet={paidSet} onOpen={setOpenMonth} onCreate={setCreating} />
 
-      <Card title="Sổ thu – chi">
-        <Ledger />
-      </Card>
+      <Ledger />
       </div>
 
       {creating && <CreateMonth initial={creating} onClose={() => setCreating(null)} />}
@@ -75,6 +73,10 @@ export default function Fund() {
 }
 
 /** Năm đang xem ‹ 2026 › — chỉ đi qua các năm có dữ liệu (và năm nay) */
+// Hai thẻ "Quỹ tháng" và "Sổ thu – chi" đứng cạnh nhau: dùng chung cỡ dòng và chân thẻ để cao bằng nhau
+const ROW = 'h-[52px]'
+const FOOT = 'mt-2 flex h-11 items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs'
+
 function YearPicker({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
   const i = years.indexOf(year)
   const arrow = 'grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent'
@@ -138,7 +140,7 @@ function MonthsCard({
           const isNow = id === thisYm
           if (!mo) {
             return (
-              <li key={id} className="flex h-[52px] items-center justify-between gap-2 text-sm">
+              <li key={id} className={`${ROW} flex items-center justify-between gap-2 text-sm`}>
                 <span className={`font-medium ${id > thisYm ? 'text-slate-300' : 'text-slate-400'}`}>
                   {label}
                   {isNow && <span className="ml-1.5 rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">Tháng này</span>}
@@ -158,8 +160,8 @@ function MonthsCard({
           const pct = ids.length ? Math.round((paid / ids.length) * 100) : 100
           const done = paid === ids.length
           return (
-            <li key={id}>
-              <button onClick={() => onOpen(id)} className="-mx-2 flex h-[52px] w-[calc(100%+1rem)] cursor-pointer flex-col justify-center rounded-xl px-2 text-left transition hover:bg-slate-50">
+            <li key={id} className={ROW}>
+              <button onClick={() => onOpen(id)} className="-mx-2 flex h-full w-[calc(100%+1rem)] cursor-pointer flex-col justify-center rounded-xl px-2 text-left transition hover:bg-slate-50">
                 <div className="flex w-full justify-between text-sm">
                   <span className="font-semibold text-slate-800">
                     {label}
@@ -178,7 +180,7 @@ function MonthsCard({
           )
         })}
       </ul>
-      <div className="mt-2 flex min-h-8 items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs">
+      <div className={FOOT}>
         <span className="text-slate-500">Cả năm {year}</span>
         <span className="text-slate-600">
           Đã thu <b className="text-green-700">{money(collected)}</b> / {money(expected)}
@@ -352,8 +354,18 @@ function Ledger() {
   const arrow = 'grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent'
 
   return (
-    <>
-      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+    <Card
+      title="Sổ thu – chi"
+      subtitle={
+        rows.length ? (
+          <>
+            <span className="font-medium text-green-700">+{money(totalIn)}</span> · <span className="font-medium text-red-600">−{money(totalOut)}</span>
+          </>
+        ) : (
+          'Chưa có khoản nào'
+        )
+      }
+      right={
         <div className="flex gap-1 text-xs">
           {(['all', 'main', 'extra'] as const).map((f) => (
             <button key={f} onClick={() => pick(f)} className={`cursor-pointer rounded-full px-2.5 py-1 ${filter === f ? 'bg-green-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
@@ -361,19 +373,16 @@ function Ledger() {
             </button>
           ))}
         </div>
-        {rows.length > 0 && (
-          <div className="text-xs text-slate-500">
-            <span className="font-medium text-green-700">+{money(totalIn)}</span> · <span className="font-medium text-red-600">−{money(totalOut)}</span>
-          </div>
-        )}
-      </div>
+      }
+    >
       {!rows.length ? (
         <Empty>Chưa có khoản ủng hộ hay khoản chi nào.</Empty>
       ) : (
         <>
-        <ul className="divide-y divide-slate-100 text-sm">
+        {/* trang cuối ít dòng vẫn giữ nguyên chiều cao để thanh chia trang không nhảy */}
+        <ul className="divide-y divide-slate-100 text-sm" style={pages > 1 ? { minHeight: size * 52 } : undefined}>
           {shown.map((r) => (
-            <li key={r.x.id} className="flex h-[52px] items-center justify-between gap-2">
+            <li key={r.x.id} className={`${ROW} flex items-center justify-between gap-2`}>
               <div className="min-w-0">
                 <div className="truncate">{r.x.note}</div>
                 <div className="text-xs text-slate-500">
@@ -406,8 +415,8 @@ function Ledger() {
             </li>
           ))}
         </ul>
-        <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
-          <span className="text-xs text-slate-500">
+        <div className={FOOT}>
+          <span className="text-slate-500">
             {cur * size + 1}–{cur * size + shown.length} / {rows.length} khoản
           </span>
           <div className="flex items-center gap-1">
@@ -434,7 +443,7 @@ function Ledger() {
         </div>
         </>
       )}
-    </>
+    </Card>
   )
 }
 
