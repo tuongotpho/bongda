@@ -410,6 +410,7 @@ html.dark body .keep-colors {
   :where(html.dark) .bg-white\/90 { background-color: color-mix(in oklab, #111816 90%, transparent); }
   :where(html.dark) .bg-white\/95 { background-color: color-mix(in oklab, #111816 95%, transparent); }
   :where(html.dark) .ring-black\/5 { --tw-ring-color: rgb(255 255 255 / 0.08); }
+  :where(html.dark) .bg-amber-500 { background-color: var(--k-amber-500); }
   :where(html.dark) .bg-amber-600 { background-color: var(--k-amber-600); }
   :where(html.dark) .bg-amber-800 { background-color: var(--k-amber-800); }
   :where(html.dark) .bg-emerald-700 { background-color: var(--k-emerald-700); }

@@ -12,9 +12,8 @@ export default function Fund() {
   const { data, canEdit } = useApp()
   const fund = fundSummary(data)
   const held = advanceHeld(data)
-  const months = useMemo(() => [...data.months].sort((a, b) => b.id.localeCompare(a.id)), [data.months])
   const [openMonth, setOpenMonth] = useState<string | null>(null)
-  const [creating, setCreating] = useState(false)
+  const [creating, setCreating] = useState<string | null>(null)
   const [entry, setEntry] = useState<{ type: 'in' | 'out'; fund: FundId } | null>(null)
   const paidSet = useMemo(() => new Set(data.payments.map((p) => p.id)), [data.payments])
   const month = data.months.find((m) => m.id === openMonth)
@@ -61,50 +60,137 @@ export default function Fund() {
       </div>
 
       <div className="grid items-start gap-6 xl:grid-cols-2">
-      <Card title="Quỹ tháng" right={canEdit && <Btn kind="soft" onClick={() => setCreating(true)}>+ Mở quỹ tháng</Btn>}>
-        {!months.length ? (
-          <Empty>Chưa mở quỹ tháng nào.</Empty>
-        ) : (
-          <ul className="divide-y divide-slate-100">
-            {months.map((mo) => {
-              const ids = Object.keys(mo.amounts)
-              const paid = ids.filter((id) => paidSet.has(obligationId('monthly', mo.id, id))).length
-              const pct = ids.length ? Math.round((paid / ids.length) * 100) : 100
-              return (
-                <li key={mo.id}>
-                  <button onClick={() => setOpenMonth(mo.id)} className="-mx-2 w-[calc(100%+1rem)] rounded-xl px-2 py-3 text-left transition hover:bg-slate-50">
-                    <div className="flex justify-between text-sm">
-                      <span className="font-semibold">{fmtMonth(mo.id)}</span>
-                      <span className={paid === ids.length ? 'text-green-700' : 'text-red-600'}>
-                        {paid}/{ids.length} đã đóng
-                      </span>
-                    </div>
-                    <div className="mt-1.5 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div className="h-full rounded-full bg-green-600" style={{ width: `${pct}%` }} />
-                    </div>
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-      </Card>
+      <MonthsCard paidSet={paidSet} onOpen={setOpenMonth} onCreate={setCreating} />
 
       <Card title="Sổ thu – chi">
         <Ledger />
       </Card>
       </div>
 
-      {creating && <CreateMonth onClose={() => setCreating(false)} />}
+      {creating && <CreateMonth initial={creating} onClose={() => setCreating(null)} />}
       {month && <MonthModal mo={month} onClose={() => setOpenMonth(null)} />}
       {entry && <AddEntry {...entry} onClose={() => setEntry(null)} />}
     </div>
   )
 }
 
-function CreateMonth({ onClose }: { onClose: () => void }) {
+/** Năm đang xem ‹ 2026 › — chỉ đi qua các năm có dữ liệu (và năm nay) */
+function YearPicker({ years, year, onChange }: { years: number[]; year: number; onChange: (y: number) => void }) {
+  const i = years.indexOf(year)
+  const arrow = 'grid h-7 w-7 cursor-pointer place-items-center rounded-lg text-slate-500 transition hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent'
+  return (
+    <div className="flex items-center gap-0.5 rounded-xl bg-slate-50 p-0.5 ring-1 ring-slate-200/70">
+      <button className={arrow} disabled={i <= 0} onClick={() => onChange(years[i - 1])} aria-label="Năm trước">
+        <Icon name="chevron" className="h-4 w-4 rotate-180" strokeWidth={2.2} />
+      </button>
+      <span className="min-w-[3rem] text-center text-sm font-bold tabular-nums text-slate-800">{year}</span>
+      <button className={arrow} disabled={i >= years.length - 1} onClick={() => onChange(years[i + 1])} aria-label="Năm sau">
+        <Icon name="chevron" className="h-4 w-4" strokeWidth={2.2} />
+      </button>
+    </div>
+  )
+}
+
+function MonthsCard({
+  paidSet,
+  onOpen,
+  onCreate,
+}: {
+  paidSet: Set<string>
+  onOpen: (id: string) => void
+  onCreate: (ym: string) => void
+}) {
+  const { data, canEdit } = useApp()
+  const thisYear = Number(todayISO().slice(0, 4))
+  const thisYm = todayISO().slice(0, 7)
+  const years = useMemo(
+    () => [...new Set([thisYear, ...data.months.map((m) => Number(m.id.slice(0, 4)))])].sort((a, b) => a - b),
+    [data.months, thisYear],
+  )
+  const [year, setYear] = useState(thisYear)
+  const byId = new Map(data.months.map((m) => [m.id, m]))
+  const slots = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  const opened = slots.filter((id) => byId.has(id)).length
+  const expected = slots.reduce((s, id) => s + Object.values(byId.get(id)?.amounts ?? {}).reduce((a, n) => a + n, 0), 0)
+  const collected = data.payments
+    .filter((p) => p.kind === 'monthly' && p.refId.startsWith(`${year}-`))
+    .reduce((s, p) => s + p.amount, 0)
+
+  return (
+    <Card
+      title="Quỹ tháng"
+      subtitle={`Đã mở ${opened}/12 tháng`}
+      right={
+        <>
+          <YearPicker years={years} year={year} onChange={setYear} />
+          {canEdit && (
+            <Btn kind="soft" className="px-2.5" onClick={() => onCreate(thisYm)} aria-label="Mở quỹ tháng">
+              <Icon name="plus" className="h-4 w-4" strokeWidth={2.2} />
+            </Btn>
+          )}
+        </>
+      }
+    >
+      <ul className="divide-y divide-slate-100">
+        {slots.map((id) => {
+          const mo = byId.get(id)
+          const label = `Tháng ${Number(id.slice(5))}`
+          const isNow = id === thisYm
+          if (!mo) {
+            return (
+              <li key={id} className="flex h-[52px] items-center justify-between gap-2 text-sm">
+                <span className={`font-medium ${id > thisYm ? 'text-slate-300' : 'text-slate-400'}`}>
+                  {label}
+                  {isNow && <span className="ml-1.5 rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">Tháng này</span>}
+                </span>
+                {canEdit && id <= thisYm ? (
+                  <button onClick={() => onCreate(id)} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-50">
+                    + Mở quỹ
+                  </button>
+                ) : (
+                  <span className="text-xs text-slate-300">Chưa mở</span>
+                )}
+              </li>
+            )
+          }
+          const ids = Object.keys(mo.amounts)
+          const paid = ids.filter((m) => paidSet.has(obligationId('monthly', mo.id, m))).length
+          const pct = ids.length ? Math.round((paid / ids.length) * 100) : 100
+          const done = paid === ids.length
+          return (
+            <li key={id}>
+              <button onClick={() => onOpen(id)} className="-mx-2 flex h-[52px] w-[calc(100%+1rem)] cursor-pointer flex-col justify-center rounded-xl px-2 text-left transition hover:bg-slate-50">
+                <div className="flex w-full justify-between text-sm">
+                  <span className="font-semibold text-slate-800">
+                    {label}
+                    {isNow && <span className="ml-1.5 rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">Tháng này</span>}
+                  </span>
+                  <span className={`text-xs font-medium ${done ? 'text-green-700' : 'text-red-600'}`}>
+                    {done ? 'Đủ ' : ''}
+                    {paid}/{ids.length} đã đóng
+                  </span>
+                </div>
+                <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-slate-100">
+                  <div className={`h-full rounded-full ${done ? 'bg-green-600' : 'bg-amber-500'}`} style={{ width: `${pct}%` }} />
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+      <div className="mt-2 flex min-h-8 items-center justify-between gap-2 border-t border-slate-100 pt-2 text-xs">
+        <span className="text-slate-500">Cả năm {year}</span>
+        <span className="text-slate-600">
+          Đã thu <b className="text-green-700">{money(collected)}</b> / {money(expected)}
+        </span>
+      </div>
+    </Card>
+  )
+}
+
+function CreateMonth({ initial, onClose }: { initial: string; onClose: () => void }) {
   const { data, toast } = useApp()
-  const [ym, setYm] = useState(todayISO().slice(0, 7))
+  const [ym, setYm] = useState(initial)
   const active = data.members.filter((m) => m.active && m.monthlyFee > 0)
   const total = active.reduce((s, m) => s + m.monthlyFee, 0)
   const create = async () => {
@@ -235,28 +321,59 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
 
 type Row = { kind: 'in'; x: Income } | { kind: 'out'; x: Expense }
 
+// Thu gọn: cao ngang 12 dòng của "Quỹ tháng"; mở rộng: gấp đôi
+const PAGE_COMPACT = 12
+const PAGE_EXPANDED = 24
+
 function Ledger() {
   const { data, canEdit } = useApp()
   const [filter, setFilter] = useState<FundId | 'all'>('all')
+  const [expanded, setExpanded] = useState(false)
+  const [page, setPage] = useState(0)
   const rows: Row[] = [...data.incomes.map((x) => ({ kind: 'in' as const, x })), ...data.expenses.map((x) => ({ kind: 'out' as const, x }))]
     .filter((r) => filter === 'all' || r.x.fund === filter)
     .sort((a, b) => b.x.date.localeCompare(a.x.date) || b.x.createdAt - a.x.createdAt)
+  const size = expanded ? PAGE_EXPANDED : PAGE_COMPACT
+  const pages = Math.max(1, Math.ceil(rows.length / size))
+  const cur = Math.min(page, pages - 1) // xoá dòng cuối của trang cuối thì lùi về trang trước
+  const shown = rows.slice(cur * size, (cur + 1) * size)
+  const totalIn = rows.reduce((s, r) => s + (r.kind === 'in' ? r.x.amount : 0), 0)
+  const totalOut = rows.reduce((s, r) => s + (r.kind === 'out' ? r.x.amount : 0), 0)
+
+  const pick = (f: FundId | 'all') => {
+    setFilter(f)
+    setPage(0)
+  }
+  const toggle = () => {
+    // giữ dòng đầu trang đang xem khi đổi cỡ trang
+    setPage(Math.floor((cur * size) / (expanded ? PAGE_COMPACT : PAGE_EXPANDED)))
+    setExpanded(!expanded)
+  }
+  const arrow = 'grid h-8 w-8 cursor-pointer place-items-center rounded-lg text-slate-600 transition hover:bg-slate-100 disabled:cursor-default disabled:opacity-30 disabled:hover:bg-transparent'
 
   return (
     <>
-      <div className="mb-2 flex gap-1 text-xs">
-        {(['all', 'main', 'extra'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} className={`rounded-full px-2.5 py-1 ${filter === f ? 'bg-green-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
-            {f === 'all' ? 'Tất cả' : FUND_NAMES[f]}
-          </button>
-        ))}
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex gap-1 text-xs">
+          {(['all', 'main', 'extra'] as const).map((f) => (
+            <button key={f} onClick={() => pick(f)} className={`cursor-pointer rounded-full px-2.5 py-1 ${filter === f ? 'bg-green-700 text-white' : 'bg-slate-100 text-slate-600'}`}>
+              {f === 'all' ? 'Tất cả' : FUND_NAMES[f]}
+            </button>
+          ))}
+        </div>
+        {rows.length > 0 && (
+          <div className="text-xs text-slate-500">
+            <span className="font-medium text-green-700">+{money(totalIn)}</span> · <span className="font-medium text-red-600">−{money(totalOut)}</span>
+          </div>
+        )}
       </div>
       {!rows.length ? (
         <Empty>Chưa có khoản ủng hộ hay khoản chi nào.</Empty>
       ) : (
+        <>
         <ul className="divide-y divide-slate-100 text-sm">
-          {rows.map((r) => (
-            <li key={r.x.id} className="flex items-center justify-between gap-2 py-2">
+          {shown.map((r) => (
+            <li key={r.x.id} className="flex h-[52px] items-center justify-between gap-2">
               <div className="min-w-0">
                 <div className="truncate">{r.x.note}</div>
                 <div className="text-xs text-slate-500">
@@ -289,6 +406,33 @@ function Ledger() {
             </li>
           ))}
         </ul>
+        <div className="mt-2 flex items-center justify-between gap-2 border-t border-slate-100 pt-2">
+          <span className="text-xs text-slate-500">
+            {cur * size + 1}–{cur * size + shown.length} / {rows.length} khoản
+          </span>
+          <div className="flex items-center gap-1">
+            {pages > 1 && (
+              <>
+                <button className={arrow} disabled={cur === 0} onClick={() => setPage(cur - 1)} aria-label="Trang trước">
+                  <Icon name="chevron" className="h-4 w-4 rotate-180" strokeWidth={2.2} />
+                </button>
+                <span className="min-w-[3.5rem] text-center text-xs font-semibold tabular-nums text-slate-700">
+                  {cur + 1} / {pages}
+                </span>
+                <button className={arrow} disabled={cur >= pages - 1} onClick={() => setPage(cur + 1)} aria-label="Trang sau">
+                  <Icon name="chevron" className="h-4 w-4" strokeWidth={2.2} />
+                </button>
+              </>
+            )}
+            {rows.length > PAGE_COMPACT && (
+              <button onClick={toggle} className="ml-1 cursor-pointer rounded-lg px-2 py-1.5 text-xs font-semibold text-green-700 transition hover:bg-green-50">
+                {expanded ? 'Thu gọn' : 'Mở rộng'}
+                <Icon name="chevron" className={`ml-0.5 inline h-3.5 w-3.5 ${expanded ? '-rotate-90' : 'rotate-90'}`} strokeWidth={2.2} />
+              </button>
+            )}
+          </div>
+        </div>
+        </>
       )}
     </>
   )
