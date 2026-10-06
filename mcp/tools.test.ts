@@ -74,6 +74,12 @@ describe('MCP: trận đấu và tiền phạt', () => {
     expect(d.matches[0].teamA).toContain('d')
   })
 
+  it('hoà rồi thắng luân lưu: báo "Hoà · Đội B thắng luân lưu", không nhắc 2 lần', () => {
+    const r = call(withMatch(), 'ghi_ket_qua', { ti_so_a: 3, ti_so_b: 3, luan_luu: 'B' })
+    expect(r.text).toContain('3–3 · Hoà · Đội B thắng luân lưu')
+    expect(r.text).toContain('Anh Hùng 20.000đ')
+  })
+
   it('xoá trận xoá luôn khoản phạt đã thu', () => {
     let d = call(withMatch(), 'ghi_ket_qua', { ti_so_a: 3, ti_so_b: 1 }).data
     d = call(d, 'xoa_tran', { tran: '05/10/2026' }).data

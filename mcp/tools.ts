@@ -112,8 +112,10 @@ function matchLine(data: AppData, m: Match, obs: Obligation[]) {
   const mine = obs.filter((o) => o.kind === 'water' && o.refId === m.id)
   const unpaid = mine.filter((o) => !o.paid)
   const score = m.scoreA != null ? `${m.scoreA}–${m.scoreB}` : ''
-  const res = m.charges ? `sổ cũ, ${m.charges.length} người bị phạt` : [score, outcomeLabel(m)].filter(Boolean).join(' · ')
-  const pen = isPenaltyDecided(m) ? ` · Đội ${getPenaltyWinner(m)} thắng luân lưu` : ''
+  const penDone = isPenaltyDecided(m)
+  // Hoà rồi thắng luân lưu → ghi "Hoà · Đội B thắng luân lưu", không ghi "Đội B thắng" hai lần
+  const res = m.charges ? `sổ cũ, ${m.charges.length} người bị phạt` : [score, penDone ? 'Hoà' : outcomeLabel(m)].filter(Boolean).join(' · ')
+  const pen = penDone ? ` · Đội ${getPenaltyWinner(m)} thắng luân lưu` : ''
   const money_ = mine.length ? ` · ${unpaid.length ? `còn ${unpaid.length}/${mine.length} chưa nộp (${money(unpaid.reduce((s, o) => s + o.amount, 0))})` : `đã thu đủ ${mine.length} người`}` : ''
   return `${fmtDate(m.date)} [${m.id}] — ${res}${pen}${money_}`
 }
