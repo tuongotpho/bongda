@@ -1,0 +1,21 @@
+{
+  "name": "bongda-mcp",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server cho Claude quản lý sổ đội bóng (database bongda trong project app-from-ai)",
+  "scripts": {
+    "start": "tsx server.ts",
+    "check": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "firebase-admin": "^14.5.0",
+    "tsx": "^4.20.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "~6.0.2"
+  }
+}

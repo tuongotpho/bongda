@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "bongda": {
+      "command": "node",
+      "args": ["mcp/node_modules/tsx/dist/cli.mjs", "mcp/server.ts"],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "${BONGDA_MCP_KEY:-C:/Users/Admin/.secrets/bongda-mcp.json}",
+        "BONGDA_READONLY": "${BONGDA_READONLY:-0}"
+      }
+    }
+  }
+}

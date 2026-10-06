@@ -31,9 +31,14 @@ jobs:
         with:
           node-version: 22
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            mcp/package-lock.json
       - run: npm ci
       - run: npm run lint
       - run: npm test
+      - name: Kiểm tra kiểu MCP server (mcp/)
+        run: npm ci --prefix mcp && npm --prefix mcp run check
       - name: Chặn build nhầm sang chế độ thử / database dùng chung
         run: |
           if [ -z "$VITE_FIREBASE_API_KEY" ] || [ "$VITE_FIREBASE_DATABASE_ID" != "bongda" ]; then

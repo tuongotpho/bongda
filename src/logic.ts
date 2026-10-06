@@ -183,6 +183,29 @@ export function stalePayments(m: Match, payments: Payment[]): Payment[] {
   )
 }
 
+export interface MatchSavePlan {
+  /** khoản đã đóng phải gỡ vì không còn khớp */
+  stale: Payment[]
+  /** trong đó là tiền mặt (cần người dùng đồng ý trước khi gỡ) */
+  staleCash: Payment[]
+  /** khoản trừ tiền ứng tự động cần thêm */
+  toAdd: Payment[]
+  deducted: string[]
+}
+
+/**
+ * Kế hoạch lưu trận — DÙNG CHUNG cho web (actions.saveMatch) và MCP để hai nơi tính sổ y hệt nhau:
+ * gỡ khoản lệch, rồi (nếu bật) tự trừ tiền ứng cho người đội thua.
+ */
+export function planMatchSave(next: Match, data: AppData, deductAdvance: boolean): MatchSavePlan {
+  const stale = stalePayments(next, data.payments)
+  const staleIds = new Set(stale.map((p) => p.id))
+  const { paymentsToAdd, deductedMemberIds } = deductAdvance
+    ? autoDeductMatchAdvance(next, { ...data, payments: data.payments.filter((p) => !staleIds.has(p.id)) })
+    : { paymentsToAdd: [], deductedMemberIds: [] }
+  return { stale, staleCash: stale.filter((p) => !isAdvancePayment(p)), toAdd: paymentsToAdd, deducted: deductedMemberIds }
+}
+
 // ---------- Tiền ứng trước phạt nước ----------
 
 export const ADVANCE_NOTE = 'Trừ từ tiền ứng trước'

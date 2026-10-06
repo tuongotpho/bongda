@@ -33,3 +33,9 @@ dist-ssr
 
 # Dữ liệu tài chính thật của đội — không đưa lên git
 import/
+
+# Khoá service account — KHÔNG BAO GIỜ đưa lên git
+*-key.json
+*.key.json
+bongda-mcp.json
+.secrets/
