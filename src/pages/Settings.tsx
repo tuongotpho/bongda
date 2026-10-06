@@ -21,7 +21,8 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
     a.href = URL.createObjectURL(blob)
     a.download = `bongda-saoluu-${todayISO()}.json`
     a.click()
-    URL.revokeObjectURL(a.href)
+    // Thu hồi ngay sẽ làm hỏng lượt tải trên Firefox/Safari
+    setTimeout(() => URL.revokeObjectURL(a.href), 10_000)
   }
 
   const restore = async (file: File) => {
@@ -37,6 +38,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
 
 TOÀN BỘ dữ liệu hiện tại sẽ bị THAY THẾ. Nên tải bản sao lưu trước.`)) return
     try {
+      backup() // tự tải bản sao lưu dữ liệu hiện tại trước khi thay thế
       await store.replaceAll(d)
       toast('Đã nạp xong: ' + summary)
       onClose()
@@ -78,7 +80,12 @@ TOÀN BỘ dữ liệu hiện tại sẽ bị THAY THẾ. Nên tải bản sao l
         </Btn>
         <label className="block cursor-pointer rounded-xl px-3 py-2 text-center text-sm font-medium text-red-600 ring-1 ring-red-200 hover:bg-red-50">
           ⬆️ Nạp dữ liệu từ file (.json) — thay thế toàn bộ
-          <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && restore(e.target.files[0])} />
+          <input type="file" accept="application/json,.json" className="hidden" onChange={(e) => {
+              const f = e.target.files?.[0]
+              e.target.value = '' // để chọn lại đúng file đó lần nữa vẫn chạy
+              if (f) restore(f)
+            }}
+          />
         </label>
       </div>
     </Modal>

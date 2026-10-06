@@ -6,18 +6,20 @@ thiết bị hãng nào cũng nói chung một ngôn ngữ. Server này là "ổ
 
 Mọi luật tính tiền dùng chung `src/logic.ts` với web → AI ghi hay người ghi trên web, sổ y hệt nhau.
 
-## 21 nút
+## 22 nút
 
 | Nhóm | Nút |
 |---|---|
-| Xem (an toàn) | `tong_quan` · `danh_sach_no` · `soan_tin_nhac` · `thanh_vien` · `lich_su_tran` · `chi_tiet_tran` · `so_quy` · `chia_doi` (chia thử, không lưu) |
-| Trận | `tao_tran` · `sua_doi_hinh` · `ghi_ket_qua` · `xoa_tran` |
+| Xem (an toàn) | `tong_quan` · `danh_sach_no` · `soan_tin_nhac` · `thanh_vien` · `lich_su_tran` · `chi_tiet_tran` · `so_quy` · `xem_cai_dat` · `chia_doi` (chia thử, không lưu) |
+| Trận | `tao_tran` · `sua_doi_hinh` (trận chưa đá) · `ghi_ket_qua` (chốt một lần) · `xoa_tran` |
 | Tiền | `gach_no` · `bo_gach_no` · `mo_quy_thang` · `ghi_thu_chi` · `xoa_thu_chi` |
 | Người & cài đặt | `them_thanh_vien` · `sua_thanh_vien` · `xoa_thanh_vien` (mặc định chỉ cho tạm nghỉ) · `cai_dat` |
 
 Rào an toàn có sẵn:
 - Không bao giờ tự nghĩ ra tỉ số; tỉ số mâu thuẫn với đội thắng → từ chối, hỏi lại.
-- Thay đổi làm mất khoản **tiền mặt đã thu** → KHÔNG lưu, báo danh sách, chỉ lưu khi anh đồng ý (`xac_nhan_go_khoan_da_thu`).
+- Trận **đã chốt kết quả** (hoặc nhập từ sổ cũ) thì KHÔNG sửa được tỉ số lẫn đội hình — ghi nhầm thì `xoa_tran` rồi `tao_tran` lại (giống web).
+- Cùng một ngày có 2 trận → bắt ghi mã trận, không đoán. Ngày không có thật (31/02) → từ chối.
+- Xoá hẳn người **còn nợ** → KHÔNG xoá, báo số nợ, chỉ xoá khi anh đồng ý (`xac_nhan_bo_no`).
 - Tên mơ hồ ("Minh" trùng 2 người) → báo để hỏi lại, không đoán.
 - Chặn cứng database `(default)` (project `app-from-ai` dùng chung với edutask, ph-mix…).
 - `BONGDA_READONLY=1` → chỉ còn nút xem.

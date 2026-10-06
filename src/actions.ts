@@ -1,4 +1,4 @@
-import { money, obligationId, planMatchSave } from './logic'
+import { fmtDate, isLocked, money, planMatchSave } from './logic'
 import { store } from './store'
 import type { AppData, Match, Obligation, Payment } from './types'
 
@@ -14,6 +14,12 @@ export function setPaid(o: Obligation, paid: boolean, note?: string) {
  * Trả về null nếu người dùng bấm Huỷ; ngược lại trả danh sách người vừa được trừ tiền ứng.
  */
 export async function saveMatch(next: Match, data: AppData, deductAdvance = false): Promise<string[] | null> {
+  // Chốt chặn chung: trận đã có kết quả (hoặc sổ cũ) thì không sửa nữa, dù gọi từ màn hình nào
+  const prev = data.matches.find((x) => x.id === next.id)
+  if (prev && isLocked(prev)) {
+    alert(`Trận ${fmtDate(prev.date)} ${prev.charges ? 'nhập từ sổ cũ' : 'đã chốt kết quả'} nên KHÔNG sửa được. Nhập nhầm thì xoá trận này rồi chia đội tạo trận mới.`)
+    return null
+  }
   const plan = planMatchSave(next, data, deductAdvance)
   if (plan.staleCash.length) {
     const total = plan.staleCash.reduce((s, p) => s + p.amount, 0)
@@ -40,9 +46,12 @@ export function deleteMatch(matchId: string, payments: Payment[]) {
   ])
 }
 
-export function deleteMonth(monthId: string, memberIds: string[]) {
+/** Xoá quỹ tháng kèm MỌI khoản đã đóng của tháng đó (kể cả người đã bị bỏ khỏi tháng) */
+export function deleteMonth(monthId: string, payments: Payment[]) {
   return store.removeMany([
     { coll: 'months', id: monthId },
-    ...memberIds.map((m) => ({ coll: 'payments' as const, id: obligationId('monthly', monthId, m) })),
+    ...payments
+      .filter((p) => p.kind === 'monthly' && p.refId === monthId)
+      .map((p) => ({ coll: 'payments' as const, id: p.id })),
   ])
 }

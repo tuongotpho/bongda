@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  isLocked,
   ADVANCE_NOTE,
   autoDeductMatchAdvance,
   buildObligations,
@@ -285,4 +286,12 @@ describe('tiền ứng đang giữ hộ (đối chiếu tiền mặt thủ quỹ
     })
     expect(advanceHeld(d)).toEqual({ total: 80000, people: 1 })
   })
+})
+
+describe('isLocked — chốt kết quả rồi thì không sửa', () => {
+  it('chưa có kết quả thì còn sửa được', () => expect(isLocked(match({ scoreA: null, scoreB: null }))).toBe(false))
+  it('có tỉ số thì khoá', () => expect(isLocked(match())).toBe(true))
+  it('chọn nhanh đội thắng không tỉ số cũng khoá', () => expect(isLocked(match({ scoreA: null, scoreB: null, winner: 'B' }))).toBe(true))
+  it('trận nhập từ sổ cũ luôn khoá', () =>
+    expect(isLocked(match({ scoreA: null, scoreB: null, teamA: [], teamB: [], charges: [{ memberId: 'a', amount: 20000 }] }))).toBe(true))
 })

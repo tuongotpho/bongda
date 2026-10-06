@@ -673,6 +673,7 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
 
   const parsed = useMemo(() => {
     const existing = new Set(data.members.map((m) => m.name.toLowerCase()))
+    const seen = new Set<string>()
     return lines.map((line) => {
       let isGK = false
       let name = line
@@ -680,7 +681,9 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
         isGK = true
         name = line.replace(/(?:^|\s|\()(?:gk|thủ môn|thu mon)(?:\)|\s|$)/gi, ' ').trim()
       }
-      const duplicate = existing.has(name.toLowerCase())
+      const key = name.toLowerCase()
+      const duplicate = existing.has(key) ? 'Trùng tên đã có' : seen.has(key) ? 'Lặp trong danh sách' : ''
+      seen.add(key)
       return { raw: line, name, isGK, duplicate }
     })
   }, [lines, data.members])
@@ -751,7 +754,7 @@ function BulkAddModal({ onClose }: { onClose: () => void }) {
                   <span className={p.duplicate ? 'line-through text-slate-400' : 'font-medium text-slate-800'}>
                     {p.name} {p.isGK && '(thủ môn)'}
                   </span>
-                  {p.duplicate && <span className="text-[10px] text-red-500 font-semibold">Trùng tên đã có</span>}
+                  {p.duplicate && <span className="text-[10px] text-red-500 font-semibold">{p.duplicate}</span>}
                 </div>
               ))}
             </div>
@@ -782,8 +785,10 @@ function ConfirmDeleteModal({
   onDeactivate: () => Promise<void>
   onClose: () => void
 }) {
-  const { data } = useApp()
+  const { data, obligations } = useApp()
   const [loading, setLoading] = useState(false)
+  // Xoá người còn nợ thì khoản nợ biến khỏi danh sách nhắc — phải báo rõ
+  const owe = obligations.filter((o) => o.memberId === member.id && !o.paid).reduce((s, o) => s + o.amount, 0)
 
   const matchesCount = data.matches.filter(
     (match) => (match.teamA || []).includes(member.id) || (match.teamB || []).includes(member.id),
@@ -808,6 +813,12 @@ function ConfirmDeleteModal({
             </div>
           </div>
         </div>
+
+        {owe > 0 && (
+          <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
+            <b>{member.name} còn nợ {money(owe)}.</b> Xoá hẳn thì khoản nợ này sẽ không còn hiện trong danh sách nhắc nữa.
+          </div>
+        )}
 
         {hasHistory ? (
           <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs text-amber-900 space-y-2">

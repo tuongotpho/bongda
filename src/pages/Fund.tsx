@@ -107,6 +107,7 @@ function CreateMonth({ onClose }: { onClose: () => void }) {
   const active = data.members.filter((m) => m.active && m.monthlyFee > 0)
   const total = active.reduce((s, m) => s + m.monthlyFee, 0)
   const create = async () => {
+    if (!/^\d{4}-\d{2}$/.test(ym)) return toast('Chọn tháng cần mở quỹ')
     if (data.months.some((m) => m.id === ym)) return toast(`${fmtMonth(ym)} đã mở rồi`)
     const mo: FundMonth = { id: ym, amounts: Object.fromEntries(active.map((m) => [m.id, m.monthlyFee])), createdAt: Date.now() }
     await store.put('months', ym, mo)
@@ -152,7 +153,7 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
     store.put('months', mo.id, { ...mo, amounts: { ...mo.amounts, [memberId]: ctx.memberById.get(memberId)?.monthlyFee ?? data.settings.monthlyFee } })
   const del = async () => {
     if (!confirm(`Xoá quỹ ${fmtMonth(mo.id)}? Mọi khoản đã thu của tháng này sẽ bị xoá khỏi sổ.`)) return
-    await deleteMonth(mo.id, Object.keys(mo.amounts))
+    await deleteMonth(mo.id, data.payments)
     onClose()
     toast('Đã xoá')
   }

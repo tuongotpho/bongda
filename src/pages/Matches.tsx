@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState, lazy, Suspense } from 'react'
 import type { LineupImageParams } from '../lineupImage'
 import { deleteMatch, saveMatch, setPaid } from '../actions'
-import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isPenaltyDecided, matchOutcome, outcomeLabel, money, splitTeams } from '../logic'
+import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvancePayment, isLocked, isPenaltyDecided, matchOutcome, outcomeLabel, money, splitTeams } from '../logic'
 import type { Match, Member } from '../types'
 import { Icon } from '../icons'
 import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
@@ -143,6 +143,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
 
       {open && (
         <MatchModal
+          key={open.id}
           m={open}
           allMatches={sorted}
           onSelectMatch={(nextM) => setOpenId(nextM.id)}
@@ -187,7 +188,6 @@ function MatchModal({
   const { obligations, canEdit, toast } = ctx
   const [scoreA, setScoreA] = useState(m.scoreA?.toString() ?? '')
   const [scoreB, setScoreB] = useState(m.scoreB?.toString() ?? '')
-  const [date] = useState(m.date)
   const [note, setNote] = useState(m.note ?? '')
   const [penaltyWinner, setPenaltyWinner] = useState<'A' | 'B' | null>(m.penaltyWinner ?? null)
   const [penaltyScoreA, setPenaltyScoreA] = useState(m.penaltyScoreA?.toString() ?? '')
@@ -208,11 +208,16 @@ function MatchModal({
 
   const obs = obligations.filter((x) => x.kind === 'water' && x.refId === m.id)
   const o = matchOutcome(m)
+  // Đã chốt kết quả (hoặc sổ cũ) → khoá đội hình và kết quả
+  const locked = isLocked(m)
+  // Bấm "Hoà" chưa lưu ngay: mở phần luân lưu, chọn xong mới chốt (chốt rồi không sửa được)
+  const [drawDraft, setDrawDraft] = useState(false)
   const toNum = (s: string) => (s.trim() === '' ? null : Math.max(0, Math.floor(Number(s))))
 
   const skill = (ids: string[]) => ids.reduce((s, id) => s + (ctx.memberById.get(id)?.skill ?? 3), 0)
 
   const movePlayer = async (id: string) => {
+    if (locked) return
     if (!canEdit) {
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để sửa đội hình.')
       ctx.login?.()
@@ -267,6 +272,7 @@ function MatchModal({
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để ghi nhận kết quả.')
       return
     }
+    if (locked) return
     const scored = a != null && b != null
     const winner = scored ? null : (opts.winner ?? null)
     const tied = scored ? a === b : winner === 'draw'
@@ -282,10 +288,16 @@ function MatchModal({
       penaltyWinner: pWinner,
       penaltyScoreA: pA,
       penaltyScoreB: pB,
-      date,
       note: note.trim() || undefined,
     }
     const decided = matchOutcome(updatedMatch) !== 'pending'
+    if (!decided) return toast('Chọn đội thắng hoặc nhập đủ tỉ số')
+    const out = matchOutcome(updatedMatch)
+    const summary =
+      (scored ? `${a} – ${b}: ` : '') +
+      (tied ? `Hoà${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}` : `Đội ${out} thắng`) +
+      (out === 'draw' ? '' : ` — đội ${out === 'A' ? 'B' : 'A'} nộp phạt`)
+    if (!confirm(`Chốt kết quả: ${summary}?\n\nSau khi chốt KHÔNG sửa được nữa. Nhập nhầm thì phải xoá trận và chia đội tạo trận mới.`)) return
 
     const deducted = await saveMatch(updatedMatch, ctx.data, decided)
     if (!deducted) return
@@ -295,16 +307,18 @@ function MatchModal({
     setPenaltyScoreA(pA?.toString() ?? '')
     setPenaltyScoreB(pB?.toString() ?? '')
 
-    if (!decided) return toast('Đã xoá kết quả trận đấu')
     // saveMatch đã tự trừ tiền ứng cho người đội thua nếu họ còn số dư ứng
     const advMsg = deducted.length > 0 ? ` · Đã trừ tiền ứng cho: ${deducted.map((id) => name(ctx, id)).join(', ')}` : ''
     const what = scored ? `${a} – ${b}` : winner === 'draw' ? 'Hoà (chưa ghi tỉ số)' : `Đội ${winner} thắng (chưa ghi tỉ số)`
-    toast(`Đã lưu: ${what}${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}${advMsg}${opts.extra ?? ''}`)
+    toast(`Đã chốt: ${what}${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}${advMsg}${opts.extra ?? ''}`)
   }
 
   // Nút chọn nhanh thắng / hoà: giữ tỉ số đã nhập nếu khớp, không khớp hoặc chưa nhập thì để trống tỉ số
-  const setQuickWinner = (w: 'A' | 'B' | 'draw' | 'clear') => {
-    if (w === 'clear') return saveResult(null, null, { winner: null, penWinner: null, penA: null, penB: null })
+  const setQuickWinner = (w: 'A' | 'B' | 'draw') => {
+    if (w === 'draw') {
+      setDrawDraft(true)
+      return toast('Hoà — chọn có đá luân lưu không để chốt kết quả')
+    }
     const a = toNum(scoreA)
     const b = toNum(scoreB)
     const fits = a != null && b != null && (w === 'A' ? a > b : w === 'B' ? b > a : a === b)
@@ -325,7 +339,7 @@ function MatchModal({
   const handleManualSave = async () => {
     const a = toNum(scoreA)
     const b = toNum(scoreB)
-    if ((a == null) !== (b == null)) return toast('Nhập đủ tỉ số cả hai đội (hoặc xóa trắng cả 2)')
+    if (a == null || b == null || Number.isNaN(a) || Number.isNaN(b)) return toast('Nhập đủ tỉ số cả hai đội (hoặc bấm chọn nhanh đội thắng)')
     const pa = toNum(penaltyScoreA)
     const pb = toNum(penaltyScoreB)
     let pWinner = penaltyWinner
@@ -334,7 +348,7 @@ function MatchModal({
       else if (pb > pa) pWinner = 'B'
     }
     // Để trống tỉ số = giữ nguyên kết quả chọn nhanh (nếu có)
-    await saveResult(a, b, { winner: m.winner ?? null, penWinner: pWinner, penA: pa, penB: pb })
+    await saveResult(a, b, { winner: null, penWinner: pWinner, penA: pa, penB: pb })
   }
 
   // Thu tất cả tiền phạt của trận này trong 1 cú click
@@ -360,7 +374,6 @@ function MatchModal({
     }
     const lines = [
       `💧 TIỀN NƯỚC / PHẠT TRẬN ${fmtDate(m.date)}`,
-      `Mỗi người: ${money(m.waterFee)}`,
       `Danh sách chưa đóng (${unpaid.length} người):`,
       ...unpaid.map((o) => `- ${name(ctx, o.memberId)}: ${money(o.amount)}`),
     ]
@@ -444,8 +457,11 @@ function MatchModal({
             >
               {allMatches.map((match) => (
                 <option key={match.id} value={match.id}>
-                  {fmtDate(match.date)} — {match.teamA.length + match.teamB.length} người{' '}
-                  {match.scoreA != null ? `(${match.scoreA} - ${match.scoreB})` : matchOutcome(match) === 'pending' ? '(chưa có kết quả)' : `(${outcomeLabel(match)})`}
+                  {fmtDate(match.date)} —{' '}
+                  {match.charges
+                    ? `sổ cũ, ${match.charges.length} người bị phạt`
+                    : `${match.teamA.length + match.teamB.length} người `}
+                  {match.charges ? '' : match.scoreA != null ? `(${match.scoreA} - ${match.scoreB})` : matchOutcome(match) === 'pending' ? '(chưa có kết quả)' : `(${outcomeLabel(match)})`}
                 </option>
               ))}
             </select>
@@ -483,15 +499,15 @@ function MatchModal({
             </div>
 
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
-              <span className="font-medium">Bấm tên cầu thủ để chuyển sang đội kia</span>
+              <span className="font-medium">{locked ? 'Đã chốt kết quả — đội hình không sửa được' : 'Bấm tên cầu thủ để chuyển sang đội kia'}</span>
               <div className="flex flex-wrap items-center gap-1.5">
-                <button
+                {!locked && <button
                   type="button"
                   onClick={reSplit}
                   className="rounded-xl border border-sky-200 bg-white px-2.5 py-1 text-xs font-semibold text-sky-800 shadow-xs hover:bg-sky-50 transition cursor-pointer"
                 >
                   Chia lại 2 đội
-                </button>
+                </button>}
                 <button
                   type="button"
                   onClick={openLineupImage}
@@ -499,13 +515,13 @@ function MatchModal({
                 >
                   Xuất ảnh Zalo
                 </button>
-                <button
+                {!locked && <button
                   type="button"
                   onClick={onEdit}
                   className="rounded-xl border border-green-300 bg-green-700 px-2.5 py-1 text-xs font-semibold text-white shadow-xs hover:bg-green-800 transition cursor-pointer"
                 >
                   Sửa danh sách / ngày
-                </button>
+                </button>}
               </div>
             </div>
 
@@ -543,7 +559,8 @@ function MatchModal({
                             <button
                               type="button"
                               onClick={() => movePlayer(id)}
-                              title="Bấm để đổi sang đội kia"
+                              disabled={locked}
+                              title={locked ? undefined : 'Bấm để đổi sang đội kia'}
                               className="flex min-w-0 flex-1 cursor-pointer items-center justify-between gap-1 rounded-lg bg-white px-2 py-1.5 text-left text-[13px] font-medium ring-1 ring-black/5 transition hover:ring-green-400"
                             >
                               <span className="truncate">{name(ctx, id)}</span>
@@ -552,7 +569,7 @@ function MatchModal({
                                 <span className="text-amber-600">{mem?.skill ?? 3}★</span>
                               </span>
                             </button>
-                            {canEdit && (
+                            {canEdit && !locked && (
                               <button
                                 type="button"
                                 onClick={() => removePlayerFromMatch(id)}
@@ -581,16 +598,6 @@ function MatchModal({
                 <p className="mt-1 text-xs text-slate-600">
                   Trận này hiện chỉ có danh sách {m.charges.length} người bị phạt tiền nước, chưa phân chia đội hình 2 đội.
                 </p>
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <Btn onClick={onEdit} className="text-xs py-2 px-3.5 shadow-sm">
-                    <Icon name="edit" className="h-3.5 w-3.5" /> Sắp xếp & sửa đội hình
-                  </Btn>
-                  {!canEdit && (
-                    <span className="text-[11px] text-amber-800">
-                      (Đăng nhập Thủ quỹ để lưu kết quả vào sổ)
-                    </span>
-                  )}
-                </div>
               </div>
             </div>
           </div>
@@ -608,18 +615,9 @@ function MatchModal({
               <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
                 Kết quả trận
               </span>
-              {o !== 'pending' && (
-                <button
-                  type="button"
-                  onClick={() => setQuickWinner('clear')}
-                  className="text-xs text-slate-500 hover:text-red-600 underline"
-                >
-                  Xóa kết quả
-                </button>
-              )}
             </div>
 
-            {canEdit ? (
+            {canEdit && !locked ? (
               <div className="grid grid-cols-3 gap-2">
                 <button
                   type="button"
@@ -638,15 +636,13 @@ function MatchModal({
                   type="button"
                   onClick={() => setQuickWinner('draw')}
                   className={`rounded-xl px-2.5 py-2 text-xs font-bold transition shadow-xs ${
-                    o === 'draw' || isPenaltyDecided(m)
+                    drawDraft
                       ? 'bg-slate-700 text-white ring-2 ring-slate-900 scale-102'
                       : 'bg-white text-slate-700 ring-1 ring-slate-200 hover:bg-slate-50'
                   }`}
                 >
                   Hoà
-                  <span className="block text-[10px] font-normal opacity-80">
-                    {isPenaltyDecided(m) ? `Đội ${o} thắng Pen` : 'Theo luật đã đặt'}
-                  </span>
+                  <span className="block text-[10px] font-normal opacity-80">Chọn luân lưu bên dưới</span>
                 </button>
 
                 <button
@@ -671,14 +667,18 @@ function MatchModal({
                     : o === 'draw'
                       ? 'Kết quả: Hoà'
                       : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
+                {locked && m.scoreA != null && !isPenaltyDecided(m) && <span className="ml-1 text-slate-500">({m.scoreA}–{m.scoreB})</span>}
               </div>
+            )}
+            {locked && (
+              <p className="mt-2 text-center text-xs text-slate-500">
+                Kết quả đã chốt{m.note ? ` · ${m.note}` : ''}.{canEdit && ' Nhập nhầm thì xoá trận này rồi chia đội tạo trận mới.'}
+              </p>
             )}
 
             {/* Phân định Penalty khi hòa tỉ số */}
-            {canEdit &&
-              ((toNum(scoreA) != null && toNum(scoreB) != null && toNum(scoreA) === toNum(scoreB)) ||
-                penaltyWinner ||
-                o === 'draw') && (
+            {canEdit && !locked &&
+              ((toNum(scoreA) != null && toNum(scoreB) != null && toNum(scoreA) === toNum(scoreB)) || drawDraft) && (
                 <div className="mt-3 rounded-2xl border border-emerald-300 bg-emerald-50/70 p-3 shadow-xs">
                   <div className="mb-2 flex items-center justify-between text-xs font-bold text-emerald-950">
                     <span className="flex items-center gap-1.5">
@@ -778,7 +778,7 @@ function MatchModal({
               )}
 
             {/* Chi tiết tỉ số bàn thắng & Ghi chú */}
-            {canEdit && (
+            {canEdit && !locked && (
               <div className="mt-3 border-t border-slate-200/60 pt-3">
                 <div className="grid grid-cols-[1fr_auto_1fr] items-end gap-2">
                   <Field label="Bàn Đội A">
@@ -812,7 +812,7 @@ function MatchModal({
                     />
                   </div>
                   <Btn onClick={handleManualSave} className="shrink-0 px-3 py-2 text-xs">
-                    Lưu tỉ số
+                    Chốt tỉ số
                   </Btn>
                 </div>
               </div>

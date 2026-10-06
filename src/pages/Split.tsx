@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 import type { LineupImageParams } from '../lineupImage'
-import { fmtDate, matchOutcome, outcomeLabel, money, newId, splitTeams, todayISO } from '../logic'
+import { isLocked, fmtDate, matchOutcome, outcomeLabel, money, newId, splitTeams, todayISO } from '../logic'
 import { saveMatch } from '../actions'
 import type { Match } from '../types'
 import { Icon } from '../icons'
@@ -20,7 +20,11 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
   const [showHistoryModal, setShowHistoryModal] = useState(false)
   const [imageModalParams, setImageModalParams] = useState<LineupImageParams | null>(null)
 
-  const editMatch = useMemo(() => data.matches.find((m) => m.id === editMatchId), [data.matches, editMatchId])
+  // Chỉ sửa đội hình được khi trận chưa chốt kết quả (trận sổ cũ cũng khoá)
+  const editMatch = useMemo(() => {
+    const m = data.matches.find((x) => x.id === editMatchId)
+    return m && !isLocked(m) ? m : undefined
+  }, [data.matches, editMatchId])
 
   const selectableMembers = useMemo(() => {
     const map = new Map<string, (typeof data.members)[0]>()
@@ -42,21 +46,20 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
     return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name, 'vi'))
   }, [data.members, editMatch])
 
+  // Nạp đội hình trận cần sửa một lần khi mở — không chạy lại mỗi lần dữ liệu cập nhật (sẽ xoá mất chỗ đang sửa dở)
+  const editId = editMatch?.id
   useEffect(() => {
-    if (editMatch) {
-      setDate(editMatch.date)
-      if (editMatch.charges) {
-        // Trận cũ từ sổ chỉ có danh sách người nộp phạt (thường là đội thua)
-        // Mình sẽ tự tick những người này vào danh sách, còn lại user tự tick thêm
-        setPicked(new Set(editMatch.charges.map((c) => c.memberId)))
-        setTeams(null)
-      } else {
-        // Trận đã có đội hình
-        setPicked(new Set([...editMatch.teamA, ...editMatch.teamB]))
-        setTeams({ teamA: editMatch.teamA, teamB: editMatch.teamB })
-      }
+    if (!editMatch) {
+      // Huỷ sửa / trận vừa bị chốt hoặc xoá → về form chia trận mới
+      setDate(todayISO())
+      setPicked(new Set())
+      setTeams(null)
+      return
     }
-  }, [editMatch])
+    setDate(editMatch.date)
+    setPicked(new Set([...editMatch.teamA, ...editMatch.teamB]))
+    setTeams({ teamA: editMatch.teamA, teamB: editMatch.teamB })
+  }, [editId]) // eslint-disable-line react-hooks/exhaustive-deps
 
   // Danh sách các trận có đội hình (sắp xếp mới nhất lên đầu)
   const matchesWithLineup = useMemo(() => {
@@ -599,8 +602,10 @@ function PastMatchDetailModal({
 
   const skill = (ids: string[]) => ids.reduce((s, id) => s + (ctx.memberById.get(id)?.skill ?? 3), 0)
   const totalPlayers = match.teamA.length + match.teamB.length
+  const locked = isLocked(match)
 
   const movePlayer = async (id: string) => {
+    if (locked) return
     if (!canEdit) {
       toast('Vui lòng đăng nhập tài khoản Thủ quỹ để sửa đội hình.')
       ctx.login?.()
@@ -693,8 +698,8 @@ function PastMatchDetailModal({
           </div>
         </div>
 
-        {/* Thanh công cụ sửa đội hình nhanh */}
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
+        {/* Thanh công cụ sửa đội hình nhanh — trận đã chốt thì không sửa */}
+        {!locked && <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-sky-100 bg-sky-50/70 p-2.5 text-xs text-sky-900">
           <span className="flex items-center gap-1.5 font-medium">
             Bấm tên cầu thủ để chuyển sang đội kia
           </span>
@@ -714,7 +719,7 @@ function PastMatchDetailModal({
               Chọn lại người / ngày
             </button>
           </div>
-        </div>
+        </div>}
 
         {/* Bố cục 2 đội tương tự sắp xếp trận mới */}
         <div className="grid grid-cols-2 gap-3 text-sm">
@@ -794,9 +799,11 @@ function PastMatchDetailModal({
           >
             <Icon name="image" className="h-3.5 w-3.5" /> Xuất ảnh Zalo
           </Btn>
-          <Btn kind="ghost" className="flex-1 border border-slate-200" onClick={onEditLineup}>
-            <Icon name="edit" className="h-3.5 w-3.5" /> Sửa đầy đủ
-          </Btn>
+          {!locked && (
+            <Btn kind="ghost" className="flex-1 border border-slate-200" onClick={onEditLineup}>
+              <Icon name="edit" className="h-3.5 w-3.5" /> Sửa đầy đủ
+            </Btn>
+          )}
           <Btn className="flex-1" onClick={onReusePlayers}>
             Dùng cho hôm nay
           </Btn>

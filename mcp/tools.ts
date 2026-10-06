@@ -14,6 +14,7 @@ import {
   fundSummary,
   getMemberAdvanceInfo,
   getPenaltyWinner,
+  isLocked,
   isPenaltyDecided,
   matchOutcome,
   money,
@@ -79,19 +80,22 @@ export function findMatch(data: AppData, q?: string): Match {
   } else throw new ToolError(`Không hiểu trận "${q}". Ghi ngày dạng 05/10/2026, hoặc "gần nhất".`)
   const found = all.filter((m) => (iso ? m.date === iso : m.date.endsWith(dm!)))
   if (!found.length) throw new ToolError(`Không có trận ngày ${q}.`)
-  if (iso || found.length === 1) {
-    if (found.length > 1) throw new ToolError(`Ngày ${q} có ${found.length} trận: ${found.map((m) => m.id).join(', ')}. Dùng mã trận.`)
-    return found[0]
-  }
-  return found[0] // nhiều năm cùng ngày/tháng → lấy năm gần nhất
+  // Nhiều năm cùng ngày/tháng → lấy năm gần nhất; nhưng cùng một ngày có 2 trận thì KHÔNG đoán (nút xoá/ghi dùng hàm này)
+  const sameDay = found.filter((m) => m.date === found[0].date)
+  if (sameDay.length > 1) throw new ToolError(`Ngày ${fmtDate(found[0].date)} có ${sameDay.length} trận: ${sameDay.map((m) => m.id).join(', ')}. Dùng mã trận.`)
+  return found[0]
 }
 
 export function parseDate(q?: string): string {
   if (!q) return todayISO()
-  if (/^\d{4}-\d{2}-\d{2}$/.test(q)) return q
-  const m = q.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/)
-  if (!m) throw new ToolError(`Ngày "${q}" không hợp lệ. Ghi dạng 05/10/2026.`)
-  return `${m[3] ?? todayISO().slice(0, 4)}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`
+  const iso = q.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  const vn = q.match(/^(\d{1,2})\/(\d{1,2})(?:\/(\d{4}))?$/)
+  if (!iso && !vn) throw new ToolError(`Ngày "${q}" không hợp lệ. Ghi dạng 05/10/2026.`)
+  const [y, mo, d] = iso ? [+iso[1], +iso[2], +iso[3]] : [+(vn![3] ?? todayISO().slice(0, 4)), +vn![2], +vn![1]]
+  // Chặn ngày không có thật (31/02, 0/10…) — Date tự "tràn" sang tháng sau nên so lại từng phần
+  const dt = new Date(y, mo - 1, d)
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) throw new ToolError(`Ngày "${q}" không có thật.`)
+  return `${y}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`
 }
 
 export function parseMonth(q: string): string {
@@ -141,6 +145,9 @@ function matchDetail(data: AppData, m: Match) {
 
 const DRAW: Record<DrawRule, string> = { none: 'hoà không phạt', half: 'hoà phạt nửa', full: 'hoà phạt đủ' }
 
+const settingsText = (s: Settings) =>
+  `Tên đội: ${s.teamName}\nPhạt thua: ${money(s.waterFee)}/người · ${DRAW[s.drawRule]}\nQuỹ tháng mặc định: ${money(s.monthlyFee)}\nChuyển khoản: ${s.bankInfo || '(chưa ghi)'}`
+
 function memberStats(data: AppData) {
   const s = new Map<string, { played: number; won: number; drawn: number; lost: number }>()
   for (const m of data.matches) {
@@ -160,6 +167,11 @@ function memberStats(data: AppData) {
 }
 
 // ---------- Thao tác ghi ----------
+
+/** Trận đã chốt / sổ cũ: không sửa — ghi nhầm thì xoá trận, tạo lại */
+const LOCKED = (m: Match) =>
+  `Trận ${fmtDate(m.date)} [${m.id}] ${m.charges ? 'nhập từ sổ cũ' : 'đã chốt kết quả'} nên KHÔNG sửa được. ` +
+  'Nếu ghi nhầm: hỏi người dùng rồi xoa_tran trận này và tao_tran lại.'
 
 const setOp = (coll: Coll, id: string, value: object): Op => ({ kind: 'set', coll, id, data: value })
 const delOp = (coll: Coll, id: string): Op => ({ kind: 'delete', coll, id })
@@ -410,14 +422,14 @@ export const tools: Record<string, ToolDef> = {
 
   sua_doi_hinh: {
     title: 'Sửa đội hình / ngày của trận',
-    description: 'Chuyển người sang đội kia (chuyen), thêm vào đội A/B (them_a, them_b), bớt người (bot), đổi ngày (ngay_moi). Tự gỡ khoản phạt không còn khớp.',
+    description: 'CHỈ cho trận CHƯA có kết quả: chuyển người sang đội kia (chuyen), thêm vào đội A/B (them_a, them_b), bớt người (bot), đổi ngày (ngay_moi).',
     write: true,
     run: (
       a: { tran?: string; chuyen?: string[]; them_a?: string[]; them_b?: string[]; bot?: string[]; ngay_moi?: string; xac_nhan_go_khoan_da_thu?: boolean },
       data,
     ) => {
       const m = findMatch(data, a.tran)
-      if (m.charges) throw new ToolError('Trận nhập từ sổ cũ không có đội hình — sửa trên web.')
+      if (isLocked(m)) throw new ToolError(LOCKED(m))
       let A = [...m.teamA]
       let B = [...m.teamB]
       for (const n of a.chuyen ?? []) {
@@ -446,7 +458,8 @@ export const tools: Record<string, ToolDef> = {
   ghi_ket_qua: {
     title: 'Ghi kết quả trận',
     description:
-      'Ghi tỉ số (ti_so_a, ti_so_b) và/hoặc đội thắng (doi_thang: A | B | hoa) khi không có tỉ số. Hoà có thể ghi luân lưu (luan_luu: A | B | khong, pen_a, pen_b). xoa = true để xoá kết quả. KHÔNG tự nghĩ ra tỉ số. Tự tính tiền phạt, tự trừ tiền ứng.',
+      'Chốt kết quả trận CHƯA có kết quả: tỉ số (ti_so_a, ti_so_b) và/hoặc đội thắng (doi_thang: A | B | hoa) khi không có tỉ số. Hoà có thể ghi luân lưu (luan_luu: A | B | khong, pen_a, pen_b). ' +
+      'KHÔNG tự nghĩ ra tỉ số. Tự tính tiền phạt, tự trừ tiền ứng. Đã chốt thì KHÔNG sửa được (ghi nhầm thì xoa_tran rồi tao_tran lại) — đọc lại kết quả cho người dùng xác nhận trước khi gọi.',
     write: true,
     run: (
       a: {
@@ -458,38 +471,36 @@ export const tools: Record<string, ToolDef> = {
         pen_a?: number
         pen_b?: number
         ghi_chu?: string
-        xoa?: boolean
-        xac_nhan_go_khoan_da_thu?: boolean
       },
       data,
     ) => {
       const m = findMatch(data, a.tran)
-      if (m.charges) throw new ToolError('Trận nhập từ sổ cũ đã có sẵn danh sách phạt, không ghi kết quả.')
+      if (isLocked(m)) throw new ToolError(LOCKED(m))
       if ((a.ti_so_a == null) !== (a.ti_so_b == null)) throw new ToolError('Cần đủ tỉ số cả hai đội (ti_so_a và ti_so_b).')
       const scored = a.ti_so_a != null
-      if (!a.xoa && !scored && !a.doi_thang) throw new ToolError('Truyền tỉ số hoặc doi_thang.')
+      if (!scored && !a.doi_thang) throw new ToolError('Truyền tỉ số hoặc doi_thang.')
       if (scored && a.doi_thang) {
         const real = a.ti_so_a! > a.ti_so_b! ? 'A' : a.ti_so_b! > a.ti_so_a! ? 'B' : 'hoa'
         if (real !== a.doi_thang) throw new ToolError(`Tỉ số ${a.ti_so_a}–${a.ti_so_b} mâu thuẫn với doi_thang = ${a.doi_thang}. Hỏi lại người dùng.`)
       }
-      const winner = a.xoa || scored ? null : a.doi_thang === 'hoa' ? 'draw' : a.doi_thang!
-      const tied = !a.xoa && (scored ? a.ti_so_a === a.ti_so_b : winner === 'draw')
+      const winner = scored ? null : a.doi_thang === 'hoa' ? 'draw' : a.doi_thang!
+      const tied = scored ? a.ti_so_a === a.ti_so_b : winner === 'draw'
       let pw: 'A' | 'B' | null = tied && (a.luan_luu === 'A' || a.luan_luu === 'B') ? a.luan_luu : null
       if (tied && a.pen_a != null && a.pen_b != null && !pw) pw = a.pen_a > a.pen_b ? 'A' : a.pen_b > a.pen_a ? 'B' : null
       const next: Match = {
         ...m,
-        scoreA: a.xoa ? null : (a.ti_so_a ?? null),
-        scoreB: a.xoa ? null : (a.ti_so_b ?? null),
+        scoreA: a.ti_so_a ?? null,
+        scoreB: a.ti_so_b ?? null,
         winner,
         penaltyWinner: pw,
         penaltyScoreA: tied ? (a.pen_a ?? null) : null,
         penaltyScoreB: tied ? (a.pen_b ?? null) : null,
         ...(a.ghi_chu != null ? { note: a.ghi_chu || undefined } : {}),
       }
-      const { ops, notes } = saveMatchOps(next, data, a.xac_nhan_go_khoan_da_thu)
+      const { ops, notes } = saveMatchOps(next, data, false)
       const after = applyOps(data, ops) // tính câu báo SAU khi đã trừ tiền ứng / gỡ khoản lệch
       const losers = waterCharges(next)
-      const head = a.xoa ? `Đã xoá kết quả trận ${fmtDate(m.date)}.` : `Đã ghi trận ${fmtDate(m.date)}: ${matchLine(after, next, buildObligations(after)).split(' — ')[1]}`
+      const head = `Đã chốt trận ${fmtDate(m.date)}: ${matchLine(after, next, buildObligations(after)).split(' — ')[1]}`
       return {
         text: [head, losers.length ? `Phải nộp phạt: ${losers.map((c) => `${nameOf(data, c.memberId)} ${money(c.amount)}`).join(', ')}` : 'Không ai bị phạt.', ...notes].join('\n'),
         ops,
@@ -596,10 +607,17 @@ export const tools: Record<string, ToolDef> = {
 
   xoa_thanh_vien: {
     title: 'Cho nghỉ / xoá thành viên',
-    description: 'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn (tên trong trận cũ hiện "(đã xoá)"; khoản đã đóng vẫn giữ trong quỹ).',
+    description:
+      'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn (tên trong trận cũ hiện "(đã xoá)"; khoản đã đóng vẫn giữ trong quỹ). Người còn nợ thì phải có xac_nhan_bo_no = true.',
     write: true,
-    run: (a: { ten: string; xoa_han?: boolean }, data) => {
+    run: (a: { ten: string; xoa_han?: boolean; xac_nhan_bo_no?: boolean }, data) => {
       const m = findMember(data, a.ten)
+      const owe = unpaidOf(data, m)
+      if (a.xoa_han && owe.length && !a.xac_nhan_bo_no)
+        throw new ToolError(
+          `CHƯA XOÁ. ${m.name} còn nợ ${money(owe.reduce((s, o) => s + o.amount, 0))} (${owe.map((o) => o.label).join('; ')}). ` +
+            'Xoá hẳn thì khoản nợ này biến khỏi danh sách nhắc. Gợi ý cho tạm nghỉ thay vì xoá; nếu người dùng vẫn muốn xoá thì gọi lại với xac_nhan_bo_no = true.',
+        )
       if (!a.xoa_han) return { text: `Đã cho ${m.name} tạm nghỉ (không hiện khi chia đội, không tính quỹ tháng mới).`, ops: [setOp('members', m.id, { ...m, active: false })] }
       return { text: `Đã xoá hẳn ${m.name}.`, ops: [delOp('members', m.id)] }
     },
@@ -662,9 +680,16 @@ export const tools: Record<string, ToolDef> = {
     },
   },
 
+  xem_cai_dat: {
+    title: 'Xem cài đặt đội',
+    description: 'Tên đội, tiền phạt đội thua, luật hoà, mức quỹ tháng mặc định, thông tin chuyển khoản.',
+    write: false,
+    run: (_: object, data) => ({ text: settingsText(data.settings) }),
+  },
+
   cai_dat: {
-    title: 'Xem / sửa cài đặt đội',
-    description: 'Không truyền gì = xem. Sửa: ten_doi, tien_phat (mỗi người đội thua, áp cho trận mới), quy_thang (mức mặc định người mới), luat_hoa (khong_phat | phat_nua | phat_du), tai_khoan (thông tin chuyển khoản).',
+    title: 'Sửa cài đặt đội',
+    description: 'Sửa: ten_doi, tien_phat (mỗi người đội thua, áp cho trận mới), quy_thang (mức mặc định người mới), luat_hoa (khong_phat | phat_nua | phat_du), tai_khoan (thông tin chuyển khoản). Chỉ xem thì dùng xem_cai_dat.',
     write: true,
     run: (a: { ten_doi?: string; tien_phat?: number; quy_thang?: number; luat_hoa?: 'khong_phat' | 'phat_nua' | 'phat_du'; tai_khoan?: string }, data) => {
       const s = { ...data.settings }
@@ -674,9 +699,9 @@ export const tools: Record<string, ToolDef> = {
       if (a.quy_thang != null) s.monthlyFee = Math.max(0, a.quy_thang)
       if (a.luat_hoa) s.drawRule = map[a.luat_hoa]
       if (a.tai_khoan != null) s.bankInfo = a.tai_khoan
-      const text = `Tên đội: ${s.teamName}\nPhạt thua: ${money(s.waterFee)}/người · ${DRAW[s.drawRule]}\nQuỹ tháng mặc định: ${money(s.monthlyFee)}\nChuyển khoản: ${s.bankInfo || '(chưa ghi)'}`
       const changed = JSON.stringify(s) !== JSON.stringify(data.settings)
-      return changed ? { text: `Đã lưu cài đặt.\n${text}`, ops: [{ kind: 'settings', data: s }] } : { text }
+      if (!changed) throw new ToolError(`Không có gì thay đổi. Cài đặt hiện tại:\n${settingsText(s)}`)
+      return { text: `Đã lưu cài đặt.\n${settingsText(s)}`, ops: [{ kind: 'settings', data: s }] }
     },
   },
 }

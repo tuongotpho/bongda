@@ -38,7 +38,7 @@ await call('sua_thanh_vien', { ten: 'dung', nap_them_ung: 100000 })
 await call('tao_tran', { ngay: '05/10/2026', doi_a: ['hung', 'nam'], doi_b: ['tuan', 'dung'] })
 await call('ghi_ket_qua', { tran: '05/10/2026', ti_so_a: 3, ti_so_b: 1 })
 await call('gach_no', { ten: 'tuan', khoan: '05/10' })
-await call('ghi_ket_qua', { tran: '05/10/2026', doi_thang: 'B' }, true) // mất khoản tiền mặt → phải hỏi
+await call('ghi_ket_qua', { tran: '05/10/2026', doi_thang: 'B' }, true) // đã chốt kết quả → không cho sửa
 await call('tong_quan')
 await call('soan_tin_nhac')
 

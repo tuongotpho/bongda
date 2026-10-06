@@ -39,7 +39,7 @@ const emptyData = (): AppData => ({
 })
 
 export interface Store {
-  subscribe(cb: (d: AppData, ready: boolean) => void): () => void
+  subscribe(cb: (d: AppData, ready: boolean) => void, onError?: (e: Error) => void): () => void
   put(coll: Coll, id: string, value: object): Promise<void>
   remove(coll: Coll, id: string): Promise<void>
   removeMany(items: { coll: Coll; id: string }[]): Promise<void>
@@ -153,24 +153,38 @@ const clean = (v: object) => Object.fromEntries(Object.entries(v).filter(([k, x]
 function createFirebaseStore(): Store {
   const fs = db!
   return {
-    subscribe(cb) {
+    subscribe(cb, onError) {
       const d = emptyData()
       const loaded = new Set<string>()
       const total = COLLS.length + 1
       const emit = () => cb({ ...d }, loaded.size === total)
+      // Đọc lỗi (mất quyền, sai cấu hình…) thì vẫn đánh dấu đã tải để app không treo ở "Đang tải"
+      const fail = (key: string) => (e: Error) => {
+        loaded.add(key)
+        emit()
+        onError?.(e)
+      }
       const unsubs = COLLS.map((c) =>
-        onSnapshot(collection(fs, c), (snap) => {
-          ;(d[c] as object[]) = snap.docs.map((x) => ({ ...x.data(), id: x.id }))
-          loaded.add(c)
-          emit()
-        }),
+        onSnapshot(
+          collection(fs, c),
+          (snap) => {
+            ;(d[c] as object[]) = snap.docs.map((x) => ({ ...x.data(), id: x.id }))
+            loaded.add(c)
+            emit()
+          },
+          fail(c),
+        ),
       )
       unsubs.push(
-        onSnapshot(doc(fs, 'config', 'settings'), (snap) => {
-          d.settings = { ...DEFAULT_SETTINGS, ...(snap.data() as Partial<Settings> | undefined) }
-          loaded.add('settings')
-          emit()
-        }),
+        onSnapshot(
+          doc(fs, 'config', 'settings'),
+          (snap) => {
+            d.settings = { ...DEFAULT_SETTINGS, ...(snap.data() as Partial<Settings> | undefined) }
+            loaded.add('settings')
+            emit()
+          },
+          fail('settings'),
+        ),
       )
       return () => unsubs.forEach((u) => u())
     },
@@ -186,13 +200,18 @@ function createFirebaseStore(): Store {
     },
     saveSettings: (s) => setDoc(doc(fs, 'config', 'settings'), s),
     async replaceAll(d) {
+      // Không ghi được trong 1 lô duy nhất nên GHI dữ liệu mới trước, XOÁ phần thừa sau:
+      // lỡ lỗi giữa chừng thì sổ chỉ bị thừa bản ghi cũ chứ không bị mất dữ liệu.
       const ops: ((b: ReturnType<typeof writeBatch>) => void)[] = []
+      const stale: ((b: ReturnType<typeof writeBatch>) => void)[] = []
       for (const c of COLLS) {
-        const existing = await getDocs(collection(fs, c))
-        existing.forEach((x) => ops.push((b) => b.delete(x.ref)))
+        const keep = new Set((d[c] ?? []).map((x) => x.id))
         for (const x of d[c] ?? []) ops.push((b) => b.set(doc(fs, c, x.id), clean(x)))
+        const existing = await getDocs(collection(fs, c))
+        existing.forEach((x) => !keep.has(x.id) && stale.push((b) => b.delete(x.ref)))
       }
       ops.push((b) => b.set(doc(fs, 'config', 'settings'), { ...DEFAULT_SETTINGS, ...d.settings }))
+      ops.push(...stale)
       for (let i = 0; i < ops.length; i += 450) {
         const b = writeBatch(fs)
         ops.slice(i, i + 450).forEach((op) => op(b))

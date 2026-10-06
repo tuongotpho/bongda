@@ -65,10 +65,30 @@ export default function App() {
     </button>
   )
 
-  useEffect(() => store.subscribe((d, r) => (setData(d), setReady(r))), [])
+  useEffect(
+    () =>
+      store.subscribe(
+        (d, r) => (setData(d), setReady(r)),
+        (e) => toast('Không tải được dữ liệu: ' + ((e as { code?: string }).code ?? e.message)),
+      ),
+    [toast],
+  )
+  // Mọi thao tác ghi bị lỗi (hết phiên đăng nhập, mất quyền, mất mạng…) đều báo lên thay vì im lặng
+  useEffect(() => {
+    const h = (e: PromiseRejectionEvent) => {
+      const r = e.reason as { code?: string; message?: string } | undefined
+      toast('Lỗi, chưa lưu được: ' + (r?.code ?? r?.message ?? String(e.reason)))
+    }
+    window.addEventListener('unhandledrejection', h)
+    return () => window.removeEventListener('unhandledrejection', h)
+  }, [toast])
   useEffect(() => watchAuth(setAuth), [])
   useEffect(() => {
-    const h = () => setTab(initialTab())
+    const h = () => {
+      const t = initialTab()
+      setTab(t)
+      if (t !== 'split') setEditMatchId(null) // nút Back không đưa về chế độ sửa trận cũ
+    }
     window.addEventListener('hashchange', h)
     return () => window.removeEventListener('hashchange', h)
   }, [])
@@ -79,9 +99,8 @@ export default function App() {
   const go = (t: string, id?: string) => {
     location.hash = t
     setTab(t)
-    if (t === 'split') {
-      setEditMatchId(id ?? null)
-    }
+    // Rời tab Chia đội thì bỏ chế độ sửa
+    setEditMatchId(t === 'split' ? (id ?? null) : null)
     window.scrollTo(0, 0)
   }
 

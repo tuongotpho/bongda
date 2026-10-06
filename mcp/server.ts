@@ -97,8 +97,6 @@ const schemas: Record<keyof typeof tools, z.ZodRawShape> = {
     pen_a: z.number().int().min(0).optional(),
     pen_b: z.number().int().min(0).optional(),
     ghi_chu: z.string().optional(),
-    xoa: ok.describe('true = xoá kết quả'),
-    xac_nhan_go_khoan_da_thu: ok.describe('Chỉ đặt true sau khi người dùng đồng ý gỡ khoản tiền mặt đã thu'),
   },
   gach_no: {
     ten,
@@ -126,7 +124,11 @@ const schemas: Record<keyof typeof tools, z.ZodRawShape> = {
     ngay_ung: z.string().optional(),
     ghi_chu_ung: z.string().optional(),
   },
-  xoa_thanh_vien: { ten, xoa_han: ok.describe('true = xoá hẳn; mặc định chỉ tạm nghỉ') },
+  xoa_thanh_vien: {
+    ten,
+    xoa_han: ok.describe('true = xoá hẳn; mặc định chỉ tạm nghỉ'),
+    xac_nhan_bo_no: ok.describe('Chỉ đặt true sau khi người dùng đồng ý xoá dù người đó còn nợ'),
+  },
   mo_quy_thang: { thang: z.string().describe('vd. 10/2026') },
   ghi_thu_chi: {
     loai: z.enum(['thu', 'chi']),
@@ -138,6 +140,7 @@ const schemas: Record<keyof typeof tools, z.ZodRawShape> = {
   },
   xoa_thu_chi: { ma: z.string().describe('Mã từ so_quy, dạng thu:xxx / chi:xxx') },
   xoa_tran: { tran: z.string().describe('Bắt buộc ghi rõ ngày hoặc mã trận') },
+  xem_cai_dat: {},
   cai_dat: {
     ten_doi: z.string().optional(),
     tien_phat: z.number().min(0).optional(),

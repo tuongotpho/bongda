@@ -94,6 +94,9 @@ export function matchOutcome(m: Match): MatchOutcome {
   return 'draw'
 }
 
+/** Trận đã chốt kết quả (hoặc nhập từ sổ cũ) thì không sửa nữa — ghi nhầm thì xoá trận, tạo lại. Web và MCP dùng chung. */
+export const isLocked = (m: Match) => !!m.charges || matchOutcome(m) !== 'pending'
+
 /** Kết quả bằng chữ — dùng khi trận chọn nhanh đội thắng mà không ghi tỉ số */
 export function outcomeLabel(m: Match): string {
   const o = matchOutcome(m)
