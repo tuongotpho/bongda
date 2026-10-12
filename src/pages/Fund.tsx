@@ -106,7 +106,8 @@ function MonthsCard({
   const thisYear = Number(todayISO().slice(0, 4))
   const thisYm = todayISO().slice(0, 7)
   const years = useMemo(
-    () => [...new Set([thisYear, ...data.months.map((m) => Number(m.id.slice(0, 4)))])].sort((a, b) => a - b),
+    // Thêm năm sau để có thể mở quỹ sớm (nhiều người muốn đóng trước)
+    () => [...new Set([thisYear, thisYear + 1, ...data.months.map((m) => Number(m.id.slice(0, 4)))])].sort((a, b) => a - b),
     [data.months, thisYear],
   )
   const [year, setYear] = useState(thisYear)
@@ -145,7 +146,7 @@ function MonthsCard({
                   {label}
                   {isNow && <span className="ml-1.5 rounded-full bg-green-50 px-1.5 py-0.5 text-[10px] font-semibold text-green-700">Tháng này</span>}
                 </span>
-                {canEdit && id <= thisYm ? (
+                {canEdit ? (
                   <button onClick={() => onCreate(id)} className="cursor-pointer rounded-lg px-2 py-1 text-xs font-semibold text-green-700 transition hover:bg-green-50">
                     + Mở quỹ
                   </button>
