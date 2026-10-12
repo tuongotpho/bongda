@@ -7,6 +7,8 @@ import { Icon } from '../icons'
 import { confirmDialog } from '../dialog'
 import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, name, useApp } from '../ui'
 import { PayToggle } from './Matches'
+import ImageShareModal from '../ImageShareModal'
+import { generatePaidMatrixImage, type MatrixCell } from '../reportImage'
 
 export default function Fund() {
   const { data, canEdit } = useApp()
@@ -205,6 +207,7 @@ function PaidMatrix() {
   )
   const [year, setYear] = useState(thisYear)
   const [onlyOwe, setOnlyOwe] = useState(false)
+  const [exporting, setExporting] = useState(false)
 
   const slots = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
   const opened = new Set(data.months.map((m) => m.id))
@@ -223,6 +226,28 @@ function PaidMatrix() {
     })
     .filter((r) => !onlyOwe || r.owe > 0)
     .sort((a, b) => name(ctx, a.id).localeCompare(name(ctx, b.id), 'vi'))
+
+  const makeImage = () => {
+    const shown = new Set(rows.map((r) => r.id))
+    return generatePaidMatrixImage({
+      teamName: data.settings.teamName,
+      year,
+      months: slots,
+      thisMonth: thisYm,
+      onlyOwe,
+      rows: rows.map((r) => ({
+        name: name(ctx, r.id),
+        owe: r.owe,
+        cells: r.cells.map((o, i): MatrixCell =>
+          o ? (o.paid ? 'paid' : slots[i] > thisYm ? 'future' : 'unpaid') : opened.has(slots[i]) ? 'exempt' : 'closed',
+        ),
+      })),
+      collected: data.payments
+        .filter((p) => p.kind === 'monthly' && p.refId.startsWith(`${year}-`) && shown.has(p.memberId))
+        .reduce((sum, p) => sum + p.amount, 0),
+      bankInfo: data.settings.bankInfo,
+    })
+  }
 
   const toggle = async (o: NonNullable<(typeof rows)[number]['cells'][number]>) => {
     if (!canEdit) return
@@ -251,9 +276,20 @@ function PaidMatrix() {
             Chỉ người còn nợ
           </label>
           <YearPicker years={years} year={year} onChange={setYear} />
+          <Btn kind="soft" className="px-2.5" onClick={() => setExporting(true)} aria-label="Xuất ảnh bảng tổng hợp" title="Xuất ảnh">
+            <Icon name="image" className="h-4 w-4" />
+          </Btn>
         </>
       }
     >
+      {exporting && (
+        <ImageShareModal
+          title={`Bảng tổng hợp quỹ năm ${year}`}
+          fileName={`tong-hop-quy-${year}${onlyOwe ? '-con-no' : ''}.png`}
+          generate={makeImage}
+          onClose={() => setExporting(false)}
+        />
+      )}
       {!rows.length ? (
         <Empty>{onlyOwe ? 'Không ai còn nợ quỹ năm này.' : 'Chưa có thành viên đóng quỹ.'}</Empty>
       ) : (
@@ -261,7 +297,9 @@ function PaidMatrix() {
           <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
             <thead>
               <tr className="text-[11px] font-semibold text-slate-500">
-                <th className="sticky left-0 z-10 bg-white py-2 pr-3 text-left">Thành viên</th>
+                <th className="sticky left-0 z-10 bg-white py-2 pr-3 text-left">
+                  <span className="inline-block w-7 text-center">STT</span> Thành viên
+                </th>
                 {slots.map((s) => (
                   <th key={s} className={`px-0.5 py-2 text-center ${s === thisYm ? 'text-green-700' : opened.has(s) ? '' : 'text-slate-300'}`}>
                     T{Number(s.slice(5))}
@@ -271,10 +309,10 @@ function PaidMatrix() {
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
+              {rows.map((r, idx) => (
                 <tr key={r.id} className="group">
-                  <td className="sticky left-0 z-10 max-w-[9rem] truncate border-t border-slate-100 bg-white py-1.5 pr-3 font-medium text-slate-800 group-hover:bg-slate-50">
-                    {name(ctx, r.id)}
+                  <td className="sticky left-0 z-10 max-w-[11rem] truncate border-t border-slate-100 bg-white py-1.5 pr-3 font-medium text-slate-800 group-hover:bg-slate-50">
+                    <span className="inline-block w-7 text-center text-xs font-normal text-slate-400 tabular-nums">{idx + 1}</span> {name(ctx, r.id)}
                     <span className="ml-1 text-[11px] font-normal text-slate-400">
                       {r.paid}/{r.total}
                     </span>
@@ -314,7 +352,7 @@ function PaidMatrix() {
             </tbody>
             <tfoot>
               <tr className="text-[11px] text-slate-500">
-                <td className="sticky left-0 z-10 border-t border-slate-200 bg-white py-2 pr-3 font-semibold">Đã đóng</td>
+                <td className="sticky left-0 z-10 border-t border-slate-200 bg-white py-2 pr-3 font-semibold"><span className="inline-block w-7" /> Đã đóng</td>
                 {slots.map((s, i) => {
                   const cs = rows.map((r) => r.cells[i]).filter(Boolean)
                   return (
@@ -380,7 +418,6 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
   const paidAmount = new Map(data.payments.filter((p) => p.kind === 'monthly' && p.refId === mo.id).map((p) => [p.memberId, p]))
   const collected = [...paidAmount.values()].reduce((s, p) => s + p.amount, 0)
   const expected = Object.values(mo.amounts).reduce((s, n) => s + n, 0)
-
   const exempt = async (memberId: string) => {
     const ob = obs.find((o) => o.memberId === memberId)
     if (
