@@ -75,11 +75,19 @@ export function Modal({
   onClose,
   children,
   zIndex = 'z-50',
+  wide = false,
+  headerRight,
+  footer,
 }: {
-  title: string
+  title: ReactNode
   onClose: () => void
   children: ReactNode
   zIndex?: string
+  /** modal rộng (chi tiết nhiều cột), trên điện thoại vẫn một cột */
+  wide?: boolean
+  headerRight?: ReactNode
+  /** chân modal dính đáy, luôn thấy khi cuộn */
+  footer?: ReactNode
 }) {
   useEffect(() => {
     const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -89,14 +97,18 @@ export function Modal({
 
   const modalEl = (
     <div className={`fixed inset-0 ${zIndex} flex items-end justify-center bg-slate-900/60 backdrop-blur-sm sm:items-center`} onClick={onClose}>
-      <div className="animate-sheet-up max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl" onClick={(e) => e.stopPropagation()}>
+      <div className={`animate-sheet-up max-h-[92vh] w-full ${wide ? 'max-w-4xl' : 'max-w-lg'} overflow-y-auto rounded-t-3xl bg-white shadow-2xl sm:rounded-3xl`} onClick={(e) => e.stopPropagation()}>
         <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-100 bg-white/95 px-5 py-3.5 backdrop-blur">
-          <h3 className="min-w-0 truncate text-base font-bold text-slate-900">{title}</h3>
+          <h3 className="min-w-0 flex-1 truncate text-base font-bold text-slate-900">{title}</h3>
+          {headerRight}
           <button onClick={onClose} className="grid h-8 w-8 shrink-0 cursor-pointer place-items-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-800" aria-label="Đóng">
             <Icon name="x" className="h-4 w-4" strokeWidth={2.2} />
           </button>
         </div>
-        <div className="p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">{children}</div>
+        <div className={footer ? 'p-5' : 'p-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]'}>{children}</div>
+        {footer && (
+          <div className="sticky bottom-0 z-10 border-t border-slate-100 bg-white/95 px-5 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur">{footer}</div>
+        )}
       </div>
     </div>
   )

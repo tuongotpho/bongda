@@ -350,6 +350,7 @@ function MemberModal({
   )
   const [advanceDate, setAdvanceDate] = useState(member?.advanceDate ?? todayISO())
   const [advanceNote, setAdvanceNote] = useState(member?.advanceNote ?? '')
+  const [tab, setTab] = useState<'monthly' | 'water'>('monthly')
 
   const obs = member ? obligations.filter((o) => o.memberId === member.id).reverse() : []
   const owe = obs.filter((o) => !o.paid).reduce((s, o) => s + o.amount, 0)
@@ -431,229 +432,295 @@ function MemberModal({
     onDeleteMember?.(member)
   }
 
-  return (
-    <Modal title={member ? `Thành viên: ${member.name}` : 'Thêm thành viên mới'} onClose={onClose}>
-      <div className="space-y-4">
-        <div className="space-y-3">
-          <Field label="Tên thành viên">
-            <input
-              value={nm}
-              onChange={(e) => setNm(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && save()}
-              className={inputCls}
-              placeholder="VD: Tuấn Anh, Minh Đức..."
-              autoFocus={!member}
-            />
-          </Field>
+  const infoFields = (
+    <>
+      <Field label="Tên thành viên">
+        <input
+          value={nm}
+          onChange={(e) => setNm(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && save()}
+          className={inputCls}
+          placeholder="VD: Tuấn Anh, Minh Đức..."
+          autoFocus={!member}
+        />
+      </Field>
 
-          <Field label="Trình độ thi đấu" hint="1 = mới chơi · 3 = trung bình · 5 = trụ cột / gánh team">
-            <div className="flex items-center gap-1.5 py-1">
-              {[1, 2, 3, 4, 5].map((n) => (
-                <button
-                  key={n}
-                  type="button"
-                  onClick={() => setSkill(n)}
-                  className={`text-2xl transition hover:scale-125 ${n <= skill ? 'text-amber-500' : 'text-slate-300'}`}
-                  aria-label={`${n} sao`}
-                >
-                  ★
-                </button>
-              ))}
-              <span className="ml-2 text-xs font-semibold text-slate-600">({skill} sao)</span>
-            </div>
-          </Field>
+      <Field label="Trình độ thi đấu" hint="1 = mới chơi · 3 = trung bình · 5 = trụ cột / gánh team">
+        <div className="flex items-center gap-1.5 py-1">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setSkill(n)}
+              className={`text-2xl transition hover:scale-125 ${n <= skill ? 'text-amber-500' : 'text-slate-300'}`}
+              aria-label={`${n} sao`}
+            >
+              ★
+            </button>
+          ))}
+          <span className="ml-2 text-xs font-semibold text-slate-600">({skill} sao)</span>
+        </div>
+      </Field>
 
-          <Field
-            label="Mức đóng quỹ tháng (đồng)"
-            hint={`${money(Number(fee) || 0)}/tháng · Điền 0 nếu được miễn đóng quỹ tháng.`}
+      <Field
+        label="Mức đóng quỹ tháng (đồng)"
+        hint={`${money(Number(fee) || 0)}/tháng · Điền 0 nếu được miễn đóng quỹ tháng.`}
+      >
+        <input
+          inputMode="numeric"
+          value={fee}
+          onChange={(e) => setFee(e.target.value.replace(/\D/g, ''))}
+          className={inputCls}
+        />
+      </Field>
+
+      <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm">
+        <input
+          type="checkbox"
+          checked={isGK}
+          onChange={(e) => setIsGK(e.target.checked)}
+          className="h-4 w-4 rounded accent-green-700"
+        />
+        <div>
+          <span className="font-semibold text-slate-800">Biết bắt gôn</span>
+          <span className="block text-xs text-slate-500">Hệ thống sẽ tự động rải đều thủ môn cho hai bên khi chia đội</span>
+        </div>
+      </label>
+    </>
+  )
+
+  // KHU VỰC ỨNG TIỀN PHẠT THUA TRƯỚC
+  const advanceBox = (
+    <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3.5 space-y-3">
+      <div className="flex items-center justify-between">
+        <span className="font-bold text-sky-950 text-xs sm:text-sm flex items-center gap-1.5">
+          <Icon name="coins" className="h-4 w-4" /> Ứng trước tiền thua trận
+        </span>
+        {advInfo && advInfo.total > 0 && (
+          <span
+            className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
+              advInfo.remaining > 0 ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'
+            }`}
           >
-            <input
-              inputMode="numeric"
-              value={fee}
-              onChange={(e) => setFee(e.target.value.replace(/\D/g, ''))}
-              className={inputCls}
-            />
-          </Field>
+            Còn dư: {money(advInfo.remaining)}
+          </span>
+        )}
+      </div>
 
-          <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm">
-            <input
-              type="checkbox"
-              checked={isGK}
-              onChange={(e) => setIsGK(e.target.checked)}
-              className="h-4 w-4 rounded accent-green-700"
-            />
-            <div>
-              <span className="font-semibold text-slate-800">Biết bắt gôn</span>
-              <span className="block text-xs text-slate-500">Hệ thống sẽ tự động rải đều thủ môn cho hai bên khi chia đội</span>
-            </div>
-          </label>
-
-          {/* KHU VỰC ỨNG TIỀN PHẠT THUA TRƯỚC */}
-          <div className="rounded-2xl border border-sky-200 bg-sky-50/70 p-3.5 space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="font-bold text-sky-950 text-xs sm:text-sm flex items-center gap-1.5">
-                <Icon name="coins" className="h-4 w-4" /> Ứng trước tiền thua trận
-              </span>
-              {advInfo && advInfo.total > 0 && (
-                <span
-                  className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${
-                    advInfo.remaining > 0 ? 'bg-sky-100 text-sky-800' : 'bg-amber-100 text-amber-800'
-                  }`}
-                >
-                  Còn dư: {money(advInfo.remaining)}
-                </span>
-              )}
-            </div>
-
-            {advInfo && advInfo.total > 0 && (
-              <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-2.5 text-center shadow-2xs text-xs">
-                <div>
-                  <div className="text-[11px] text-slate-500">Đã ứng</div>
-                  <div className="font-bold text-slate-800 mt-0.5">{money(advInfo.total)}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-slate-500">Đã trừ ({advInfo.usedCount} trận)</div>
-                  <div className="font-bold text-orange-600 mt-0.5">-{money(advInfo.used)}</div>
-                </div>
-                <div>
-                  <div className="text-[11px] text-slate-500">Còn lại</div>
-                  <div className="font-bold text-emerald-600 mt-0.5">{money(advInfo.remaining)}</div>
-                </div>
-              </div>
-            )}
-
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-              <Field
-                label="Số tiền ứng trước (đồng)"
-                hint={advanceAmount ? money(Number(advanceAmount) || 0) : 'Để trống nếu không ứng'}
-              >
-                <input
-                  inputMode="numeric"
-                  placeholder="VD: 100000, 200000..."
-                  value={advanceAmount}
-                  onChange={(e) => setAdvanceAmount(e.target.value.replace(/\D/g, ''))}
-                  className={inputCls}
-                />
-              </Field>
-              <Field label="Ngày ứng tiền">
-                <input
-                  type="date"
-                  value={advanceDate}
-                  onChange={(e) => setAdvanceDate(e.target.value)}
-                  className={inputCls}
-                />
-              </Field>
-            </div>
-
-            {/* Các nút nạp nhanh */}
-            <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
-              <span className="font-medium text-slate-500">Nạp nhanh:</span>
-              {[100000, 200000, 500000].map((amt) => (
-                <button
-                  key={amt}
-                  type="button"
-                  onClick={() => {
-                    const cur = Number(advanceAmount) || 0
-                    setAdvanceAmount(String(cur + amt))
-                    setAdvanceDate(todayISO())
-                  }}
-                  className="rounded-lg border border-sky-200 bg-white px-2 py-0.5 font-semibold text-sky-800 hover:bg-sky-100 transition cursor-pointer text-xs"
-                >
-                  +{money(amt)}
-                </button>
-              ))}
-              {Number(advanceAmount) > 0 && (
-                <button
-                  type="button"
-                  onClick={() => setAdvanceAmount('')}
-                  className="rounded-lg px-2 py-0.5 text-slate-500 hover:text-red-600 transition cursor-pointer text-xs"
-                >
-                  Xóa ứng
-                </button>
-              )}
-            </div>
-
-            <Field label="Ghi chú ứng tiền" hint="Tùy chọn">
-              <input
-                placeholder="VD: Chuyển khoản ngày 01/10..."
-                value={advanceNote}
-                onChange={(e) => setAdvanceNote(e.target.value)}
-                className={inputCls}
-              />
-            </Field>
-
-            <p className="text-[11px] text-sky-900/80 leading-relaxed">
-              Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
-            </p>
+      {advInfo && advInfo.total > 0 && (
+        <div className="grid grid-cols-3 gap-2 rounded-xl bg-white p-2.5 text-center shadow-2xs text-xs">
+          <div>
+            <div className="text-[11px] text-slate-500">Đã ứng</div>
+            <div className="font-bold text-slate-800 mt-0.5">{money(advInfo.total)}</div>
           </div>
+          <div>
+            <div className="text-[11px] text-slate-500">Đã trừ ({advInfo.usedCount} trận)</div>
+            <div className="font-bold text-orange-600 mt-0.5">-{money(advInfo.used)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-slate-500">Còn lại</div>
+            <div className="font-bold text-emerald-600 mt-0.5">{money(advInfo.remaining)}</div>
+          </div>
+        </div>
+      )}
 
+      <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
+        <Field
+          label="Số tiền ứng trước (đồng)"
+          hint={advanceAmount ? money(Number(advanceAmount) || 0) : 'Để trống nếu không ứng'}
+        >
+          <input
+            inputMode="numeric"
+            placeholder="VD: 100000, 200000..."
+            value={advanceAmount}
+            onChange={(e) => setAdvanceAmount(e.target.value.replace(/\D/g, ''))}
+            className={inputCls}
+          />
+        </Field>
+        <Field label="Ngày ứng tiền">
+          <input
+            type="date"
+            value={advanceDate}
+            onChange={(e) => setAdvanceDate(e.target.value)}
+            className={inputCls}
+          />
+        </Field>
+      </div>
+
+      {/* Các nút nạp nhanh */}
+      <div className="flex flex-wrap items-center gap-1.5 text-xs text-slate-600">
+        <span className="font-medium text-slate-500">Nạp nhanh:</span>
+        {[100000, 200000, 500000].map((amt) => (
+          <button
+            key={amt}
+            type="button"
+            onClick={() => {
+              const cur = Number(advanceAmount) || 0
+              setAdvanceAmount(String(cur + amt))
+              setAdvanceDate(todayISO())
+            }}
+            className="rounded-lg border border-sky-200 bg-white px-2 py-0.5 font-semibold text-sky-800 hover:bg-sky-100 transition cursor-pointer text-xs"
+          >
+            +{money(amt)}
+          </button>
+        ))}
+        {Number(advanceAmount) > 0 && (
+          <button
+            type="button"
+            onClick={() => setAdvanceAmount('')}
+            className="rounded-lg px-2 py-0.5 text-slate-500 hover:text-red-600 transition cursor-pointer text-xs"
+          >
+            Xóa ứng
+          </button>
+        )}
+      </div>
+
+      <Field label="Ghi chú ứng tiền" hint="Tùy chọn">
+        <input
+          placeholder="VD: Chuyển khoản ngày 01/10..."
+          value={advanceNote}
+          onChange={(e) => setAdvanceNote(e.target.value)}
+          className={inputCls}
+        />
+      </Field>
+
+      <p className="text-[11px] text-sky-900/80 leading-relaxed">
+        Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
+      </p>
+    </div>
+  )
+
+  if (!member) {
+    return (
+      <Modal title="Thêm thành viên mới" onClose={onClose}>
+        <div className="space-y-3">
+          {infoFields}
+          {advanceBox}
           <Btn className="w-full py-2.5" onClick={() => save()}>
-            {member ? 'Lưu thay đổi' : 'Thêm (Enter để thêm tiếp người sau)'}
+            Thêm (Enter để thêm tiếp người sau)
           </Btn>
         </div>
+      </Modal>
+    )
+  }
 
-        {/* Member Debt & History */}
-        {member && (
-          <div className="border-t border-slate-100 pt-3">
-            <h4 className="mb-2 flex items-center justify-between font-bold text-slate-800">
-              <span>Lịch sử nghĩa vụ</span>
-              {owe > 0 ? (
-                <span className="text-sm font-bold text-red-600">Còn nợ: {money(owe)}</span>
-              ) : (
-                <span className="text-xs font-medium text-green-700">Đã hoàn thành tất cả</span>
-              )}
-            </h4>
-            {!obs.length ? (
-              <Empty>Chưa phát sinh nghĩa vụ nào.</Empty>
+  const monthly = obs.filter((o) => o.kind === 'monthly')
+  const water = obs.filter((o) => o.kind === 'water')
+  const list = tab === 'monthly' ? monthly : water
+  const unpaidOf = (xs: typeof obs) => xs.filter((o) => !o.paid)
+  const listOwe = unpaidOf(list).reduce((s, o) => s + o.amount, 0)
+
+  return (
+    <Modal
+      wide
+      onClose={onClose}
+      title={
+        <span className="flex min-w-0 items-center gap-2.5">
+          <Avatar name={member.name} />
+          <span className="min-w-0">
+            <span className="block truncate">{member.name}</span>
+            <span className="block truncate text-xs font-normal text-slate-500">
+              {'★'.repeat(member.skill)} · {money(member.monthlyFee)}/tháng{member.isGK ? ' · Bắt gôn' : ''} ·{' '}
+              {member.active ? 'Đang đá' : 'Tạm nghỉ'}
+            </span>
+          </span>
+        </span>
+      }
+      headerRight={
+        owe > 0 ? (
+          <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600">Còn nợ {money(owe)}</span>
+        ) : (
+          <span className="hidden shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 sm:inline">Không nợ</span>
+        )
+      }
+      footer={
+        <div className="flex flex-wrap items-center gap-2">
+          <Btn kind="ghost" className="border border-slate-200 text-xs" onClick={() => save({ active: !member.active })}>
+            {member.active ? '⏸️ Cho tạm nghỉ' : '▶️ Kích hoạt lại'}
+          </Btn>
+          <Btn kind="danger" className="border border-red-200 text-xs" onClick={del}>
+            <Icon name="trash" className="h-3.5 w-3.5" /> Xóa
+          </Btn>
+          <Btn className="ml-auto px-4 sm:px-6" onClick={() => save()}>
+            Lưu thay đổi
+          </Btn>
+          {hasHistory && (
+            <p className="hidden w-full text-[11px] text-slate-500 sm:block">
+              * Chỉ nghỉ một thời gian thì chọn "Cho tạm nghỉ" (ẩn khỏi chia đội & quỹ mới) để giữ lịch sử các trận cũ.
+            </p>
+          )}
+        </div>
+      }
+    >
+      <div className="grid gap-5 md:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)]">
+        <div className="space-y-3">
+          {infoFields}
+          {advanceBox}
+        </div>
+
+        {/* Lịch sử nghĩa vụ: tab quỹ tháng / tiền phạt */}
+        <div className="flex min-w-0 flex-col border-t border-slate-100 pt-4 md:border-t-0 md:border-l md:pt-0 md:pl-5">
+          <div className="mb-3 flex gap-1 rounded-xl bg-slate-100 p-1">
+            {([
+              ['monthly', 'Quỹ tháng', monthly],
+              ['water', 'Tiền phạt', water],
+            ] as const).map(([k, label, xs]) => {
+              const n = unpaidOf(xs).length
+              return (
+                <button
+                  key={k}
+                  onClick={() => setTab(k)}
+                  className={`flex flex-1 cursor-pointer items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold transition ${
+                    tab === k ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {label}
+                  {n > 0 && <span className="rounded-full bg-red-100 px-1.5 text-[11px] font-bold text-red-700">{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+
+          <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
+            <span>
+              {tab === 'monthly'
+                ? `Đã đóng ${list.length - unpaidOf(list).length}/${list.length} tháng`
+                : `Thua ${list.length} trận`}
+            </span>
+            {listOwe > 0 ? (
+              <span className="font-bold text-red-600">Nợ {money(listOwe)}</span>
             ) : (
-              <ul className="max-h-48 divide-y divide-slate-100 overflow-y-auto text-sm">
-                {obs.map((o) => {
-                  const pay = data.payments.find((p) => p.id === o.id)
-                  const isAdv = pay && isAdvancePayment(pay)
-                  return (
-                    <li key={o.id} className="flex items-center justify-between py-2">
-                      <div>
-                        <div className="flex items-center gap-1.5 font-medium text-slate-700">
-                          <span>{o.label}</span>
-                          {isAdv && (
-                            <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
-                              Trừ tiền ứng
-                            </span>
-                          )}
-                        </div>
-                        <div className="text-xs text-slate-500">{money(o.amount)}</div>
-                      </div>
-                      {canEdit ? <PayToggle paid={o.paid} onChange={(p) => setPaid(o, p)} /> : <PaidBadge paid={o.paid} />}
-                    </li>
-                  )
-                })}
-              </ul>
+              list.length > 0 && <span className="font-medium text-green-700">Đã đóng đủ</span>
             )}
           </div>
-        )}
 
-        {/* Actions for Existing Member: Active/Inactive & Delete */}
-        {member && (
-          <div className="border-t border-slate-100 pt-3">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Btn
-                kind="ghost"
-                className="flex-1 border border-slate-200 text-xs"
-                onClick={() => save({ active: !member.active })}
-              >
-                {member.active ? '⏸️ Cho tạm nghỉ (ẩn khỏi chia đội & quỹ mới)' : '▶️ Kích hoạt lại (đá tiếp)'}
-              </Btn>
-              <Btn kind="danger" className="border border-red-200 text-xs" onClick={del}>
-                <Icon name="trash" className="h-3.5 w-3.5" /> Xóa thành viên
-              </Btn>
-            </div>
-            {hasHistory && (
-              <p className="mt-2 text-[11px] text-slate-500 text-center">
-                * Khuyên dùng: Nếu người này chỉ nghỉ đá một thời gian, hãy chọn "Cho tạm nghỉ" để giữ lại lịch sử các trận cũ.
-              </p>
-            )}
-          </div>
-        )}
+          {!list.length ? (
+            <Empty>{tab === 'monthly' ? 'Chưa có tháng quỹ nào.' : 'Chưa phải đóng tiền phạt trận nào.'}</Empty>
+          ) : (
+            <ul className="divide-y divide-slate-100 text-sm md:max-h-[calc(92vh-13rem)] md:overflow-y-auto">
+              {list.map((o) => {
+                const pay = data.payments.find((p) => p.id === o.id)
+                const isAdv = pay && isAdvancePayment(pay)
+                return (
+                  <li key={o.id} className="flex items-center justify-between gap-2 py-2">
+                    <div>
+                      <div className="flex items-center gap-1.5 font-medium text-slate-700">
+                        <span>{o.label}</span>
+                        {isAdv && (
+                          <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
+                            Trừ tiền ứng
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-xs text-slate-500">{money(o.amount)}</div>
+                    </div>
+                    {canEdit ? <PayToggle paid={o.paid} onChange={(p) => setPaid(o, p)} /> : <PaidBadge paid={o.paid} />}
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </Modal>
   )
