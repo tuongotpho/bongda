@@ -138,6 +138,51 @@ export function waterCharges(m: Match): Charge[] {
 
 // ---------- Nghĩa vụ đóng tiền ----------
 
+/** Mức quỹ tháng của thành viên áp dụng cho tháng `ym` (YYYY-MM) */
+export function feeFor(m: Member, ym: string): number {
+  let fee = m.monthlyFee
+  for (const c of m.feeChanges ?? []) if (c.from <= ym) fee = c.fee
+  return fee
+}
+
+/** Lần đổi mức đóng sắp tới (sau tháng `ym`), nếu có */
+export function nextFeeChange(m: Member, ym: string) {
+  return (m.feeChanges ?? []).find((c) => c.from > ym)
+}
+
+/**
+ * Đổi mức quỹ tháng của thành viên bắt đầu từ tháng `from` (các lần đổi đã hẹn sau `from` bị thay).
+ * Trả về thành viên mới và các tháng đã mở cần sửa số tiền; tháng đã đóng theo mức cũ thì giữ nguyên (`kept`).
+ */
+export function planFeeChange(data: AppData, m: Member, fee: number, from: string) {
+  fee = Math.max(0, Math.round(fee))
+  const earlier = (m.feeChanges ?? []).filter((c) => c.from < from)
+  const before = earlier.length ? earlier[earlier.length - 1].fee : m.monthlyFee
+  // Chưa có tháng quỹ nào trước `from` thì không cần giữ lịch sử: đổi thẳng mức gốc
+  const hasPast = data.months.some((mo) => mo.id < from && m.id in mo.amounts)
+  const member: Member =
+    !earlier.length && !hasPast
+      ? { ...m, monthlyFee: fee, feeChanges: undefined }
+      : { ...m, feeChanges: fee === before ? (earlier.length ? earlier : undefined) : [...earlier, { from, fee }] }
+  const paid = new Set(data.payments.map((p) => p.id))
+  const months: FundMonth[] = []
+  const kept: string[] = []
+  for (const mo of [...data.months].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (mo.id < from || !(m.id in mo.amounts)) continue
+    const amount = feeFor(member, mo.id)
+    if (mo.amounts[m.id] === amount) continue
+    if (paid.has(obligationId('monthly', mo.id, m.id))) {
+      kept.push(mo.id)
+      continue
+    }
+    const amounts = { ...mo.amounts }
+    if (amount > 0) amounts[m.id] = amount
+    else delete amounts[m.id]
+    months.push({ ...mo, amounts })
+  }
+  return { member, months, kept }
+}
+
 /**
  * Xoá hẳn thành viên: gỡ khỏi mọi tháng quỹ, đội hình, danh sách phạt sổ cũ và xoá mọi khoản đã đóng
  * (số liệu gốc còn trên Google Sheet). Dọn luôn dữ liệu sót của người đã xoá trước đây.

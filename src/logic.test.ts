@@ -14,6 +14,8 @@ import {
   advanceHeld,
   outcomeLabel,
   purgeMemberPlan,
+  feeFor,
+  planFeeChange,
   isPenaltyDecided,
   waterCharges,
 } from './logic'
@@ -319,3 +321,45 @@ describe('purgeMemberPlan', () => {
     expect(plan.paidTotal).toBe(100000)
   })
 })
+
+describe('đổi mức quỹ tháng', () => {
+  const months = (ids: string[]) => ids.map((id) => ({ id, amounts: { a: 100000, b: 100000 }, createdAt: 0 }))
+
+  it('feeFor lấy mức theo tháng', () => {
+    const m = { ...mem('a'), feeChanges: [{ from: '2026-10', fee: 500000 }, { from: '2027-01', fee: 300000 }] }
+    expect(feeFor(m, '2026-09')).toBe(100000)
+    expect(feeFor(m, '2026-10')).toBe(500000)
+    expect(feeFor(m, '2026-12')).toBe(500000)
+    expect(feeFor(m, '2027-03')).toBe(300000)
+  })
+
+  it('từ T10: giữ tháng trước, sửa tháng đã mở chưa đóng, giữ tháng đã đóng mức cũ', () => {
+    const d = data({
+      months: months(['2026-09', '2026-10', '2026-11', '2026-12']),
+      payments: [{ id: 'monthly_2026-12_a', memberId: 'a', kind: 'monthly', refId: '2026-12', amount: 100000, paidAt: 0 }],
+    })
+    const plan = planFeeChange(d, d.members[0], 500000, '2026-10')
+    expect(plan.member.monthlyFee).toBe(100000)
+    expect(plan.member.feeChanges).toEqual([{ from: '2026-10', fee: 500000 }])
+    expect(plan.months.map((mo) => [mo.id, mo.amounts.a, mo.amounts.b])).toEqual([
+      ['2026-10', 500000, 100000],
+      ['2026-11', 500000, 100000],
+    ])
+    expect(plan.kept).toEqual(['2026-12'])
+  })
+
+  it('chưa có tháng nào trước mốc đổi thì đổi thẳng mức gốc, không ghi lịch sử', () => {
+    const d = data({ months: months(['2026-10']) })
+    const plan = planFeeChange(d, d.members[0], 500000, '2026-10')
+    expect(plan.member.monthlyFee).toBe(500000)
+    expect(plan.member.feeChanges).toBeUndefined()
+  })
+
+  it('đổi lại đúng mức cũ thì bỏ lần đổi đã hẹn; mức 0 thì gỡ khỏi tháng', () => {
+    const d = data({ months: months(['2026-09', '2026-10']) })
+    const a = { ...d.members[0], feeChanges: [{ from: '2026-10', fee: 500000 }] }
+    expect(planFeeChange(d, a, 100000, '2026-10').member.feeChanges).toBeUndefined()
+    expect(planFeeChange(d, a, 0, '2026-10').months[0].amounts).toEqual({ b: 100000 })
+  })
+})
+

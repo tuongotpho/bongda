@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { deleteMonth, setPaid } from '../actions'
-import { advanceHeld, fmtDate, fmtMonth, fundSummary, money, newId, obligationId, todayISO } from '../logic'
+import { advanceHeld, feeFor, fmtDate, fmtMonth, fundSummary, money, newId, obligationId, todayISO } from '../logic'
 import { store } from '../store'
 import { FUND_NAMES, type Expense, type FundId, type FundMonth, type Income } from '../types'
 import { Icon } from '../icons'
@@ -214,7 +214,7 @@ function PaidMatrix() {
   const obById = new Map(obligations.filter((o) => o.kind === 'monthly').map((o) => [o.id, o]))
 
   // Ai có trong một tháng của năm (kể cả đã nghỉ), cộng người đang đá có mức quỹ
-  const ids = new Set(data.members.filter((m) => m.active && m.monthlyFee > 0).map((m) => m.id))
+  const ids = new Set(data.members.filter((m) => m.active && feeFor(m, thisYm) > 0).map((m) => m.id))
   for (const mo of data.months) if (mo.id.startsWith(`${year}-`)) Object.keys(mo.amounts).forEach((id) => ids.add(id))
   const rows = [...ids]
     // Người đã xoá hẳn vẫn còn id trong các tháng cũ — bỏ khỏi bảng
@@ -382,12 +382,13 @@ function PaidMatrix() {
 function CreateMonth({ initial, onClose }: { initial: string; onClose: () => void }) {
   const { data, toast } = useApp()
   const [ym, setYm] = useState(initial)
-  const active = data.members.filter((m) => m.active && m.monthlyFee > 0)
-  const total = active.reduce((s, m) => s + m.monthlyFee, 0)
+  // Mỗi người theo mức đóng áp dụng cho đúng tháng được mở (có thể khác tháng trước nếu đã đổi mức)
+  const active = data.members.filter((m) => m.active && feeFor(m, ym) > 0)
+  const total = active.reduce((s, m) => s + feeFor(m, ym), 0)
   const create = async () => {
     if (!/^\d{4}-\d{2}$/.test(ym)) return toast('Chọn tháng cần mở quỹ')
     if (data.months.some((m) => m.id === ym)) return toast(`${fmtMonth(ym)} đã mở rồi`)
-    const mo: FundMonth = { id: ym, amounts: Object.fromEntries(active.map((m) => [m.id, m.monthlyFee])), createdAt: Date.now() }
+    const mo: FundMonth = { id: ym, amounts: Object.fromEntries(active.map((m) => [m.id, feeFor(m, ym)])), createdAt: Date.now() }
     await store.put('months', ym, mo)
     toast(`Đã mở quỹ ${fmtMonth(ym)} cho ${active.length} người`)
     onClose()
@@ -436,7 +437,7 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
     if (ob?.paid) await store.remove('payments', ob.id)
   }
   const add = (memberId: string) =>
-    store.put('months', mo.id, { ...mo, amounts: { ...mo.amounts, [memberId]: ctx.memberById.get(memberId)?.monthlyFee ?? data.settings.monthlyFee } })
+    store.put('months', mo.id, { ...mo, amounts: { ...mo.amounts, [memberId]: feeFor(ctx.memberById.get(memberId)!, mo.id) } })
   const del = async () => {
     if (
       !(await confirmDialog({

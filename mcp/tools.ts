@@ -9,6 +9,7 @@ import {
   advanceHeld,
   buildObligations,
   debtors,
+  feeFor,
   fmtDate,
   fmtMonth,
   fundSummary,
@@ -22,6 +23,7 @@ import {
   obligationId,
   outcomeLabel,
   personalMessage,
+  planFeeChange,
   planMatchSave,
   purgeMemberPlan,
   reminderMessage,
@@ -306,7 +308,7 @@ export const tools: Record<string, ToolDef> = {
             return [
               `${m.name}${m.isGK ? ' (thủ môn)' : ''}${m.active ? '' : ' [tạm nghỉ]'}`,
               `${m.skill}★`,
-              `quỹ ${money(m.monthlyFee)}/tháng`,
+              `quỹ ${money(feeFor(m, todayISO().slice(0, 7)))}/tháng${(m.feeChanges ?? []).map((c) => ` (từ ${fmtMonth(c.from)}: ${money(c.fee)})`).join('')}`,
               debt.get(m.id) ? `nợ ${money(debt.get(m.id)!)}` : 'đủ',
               adv.total ? `ứng còn ${money(adv.remaining)}/${money(adv.total)}` : '',
               s ? `${s.played} trận ${s.won}T-${s.drawn}H-${s.lost}B` : '',
@@ -574,15 +576,16 @@ export const tools: Record<string, ToolDef> = {
   sua_thanh_vien: {
     title: 'Sửa thông tin thành viên',
     description:
-      'Đổi tên (ten_moi), sao, thu_mon, muc_quy_thang, dang_da (false = cho tạm nghỉ). Tiền ứng: nap_them_ung (cộng thêm) hoặc tien_ung (đặt lại tổng đã ứng), ngay_ung, ghi_chu_ung.',
+      'Đổi tên (ten_moi), sao, thu_mon, muc_quy_thang (kèm tu_thang dạng 10/2026: áp dụng từ tháng đó, mặc định tháng này; các tháng trước giữ mức cũ, tháng đã mở mà chưa đóng được sửa theo), dang_da (false = cho tạm nghỉ). Tiền ứng: nap_them_ung (cộng thêm) hoặc tien_ung (đặt lại tổng đã ứng), ngay_ung, ghi_chu_ung.',
     write: true,
     run: (
-      a: { ten: string; ten_moi?: string; sao?: number; thu_mon?: boolean; muc_quy_thang?: number; dang_da?: boolean; tien_ung?: number; nap_them_ung?: number; ngay_ung?: string; ghi_chu_ung?: string },
+      a: { ten: string; ten_moi?: string; sao?: number; thu_mon?: boolean; muc_quy_thang?: number; tu_thang?: string; dang_da?: boolean; tien_ung?: number; nap_them_ung?: number; ngay_ung?: string; ghi_chu_ung?: string },
       data,
     ) => {
       const m = findMember(data, a.ten)
-      const next: Member = { ...m }
+      let next: Member = { ...m }
       const changes: string[] = []
+      const monthOps: Op[] = []
       if (a.ten_moi) {
         const clash = data.members.find((x) => x.id !== m.id && norm(x.name) === norm(a.ten_moi!))
         if (clash) throw new ToolError(`Đã có người tên ${clash.name}.`)
@@ -591,7 +594,17 @@ export const tools: Record<string, ToolDef> = {
       }
       if (a.sao != null) (next.skill = Math.min(5, Math.max(1, Math.round(a.sao)))), changes.push(`${next.skill}★`)
       if (a.thu_mon != null) (next.isGK = a.thu_mon), changes.push(a.thu_mon ? 'thủ môn' : 'không bắt gôn')
-      if (a.muc_quy_thang != null) (next.monthlyFee = Math.max(0, a.muc_quy_thang)), changes.push(`quỹ ${money(next.monthlyFee)}/tháng`)
+      if (a.muc_quy_thang != null) {
+        const from = a.tu_thang ? parseMonth(a.tu_thang) : todayISO().slice(0, 7)
+        const plan = planFeeChange(data, m, a.muc_quy_thang, from)
+        next = { ...next, monthlyFee: plan.member.monthlyFee, feeChanges: plan.member.feeChanges }
+        monthOps.push(...plan.months.map((mo) => setOp('months', mo.id, mo)))
+        changes.push(
+          `quỹ ${money(feeFor(next, from))}/tháng từ ${fmtMonth(from)}` +
+            (plan.months.length ? ` (sửa ${plan.months.map((mo) => fmtMonth(mo.id)).join(', ')})` : '') +
+            (plan.kept.length ? ` (giữ nguyên tháng đã đóng mức cũ: ${plan.kept.map(fmtMonth).join(', ')})` : ''),
+        )
+      }
       if (a.dang_da != null) (next.active = a.dang_da), changes.push(a.dang_da ? 'đang đá' : 'tạm nghỉ')
       if (a.tien_ung != null || a.nap_them_ung != null) {
         const total = a.tien_ung != null ? Math.max(0, a.tien_ung) : (m.advanceAmount ?? 0) + Math.max(0, a.nap_them_ung!)
@@ -602,7 +615,7 @@ export const tools: Record<string, ToolDef> = {
       if (a.ghi_chu_ung != null) (next.advanceNote = a.ghi_chu_ung || undefined), changes.push('ghi chú ứng')
       if (!changes.length) throw new ToolError('Chưa có gì để sửa.')
       const adv = getMemberAdvanceInfo(next, data.payments)
-      return { text: `Đã sửa ${m.name}: ${changes.join(', ')}.${next.advanceAmount ? ` Tiền ứng còn ${money(adv.remaining)}.` : ''}`, ops: [setOp('members', m.id, next)] }
+      return { text: `Đã sửa ${m.name}: ${changes.join(', ')}.${next.advanceAmount ? ` Tiền ứng còn ${money(adv.remaining)}.` : ''}`, ops: [setOp('members', m.id, next), ...monthOps] }
     },
   },
 
@@ -640,9 +653,9 @@ export const tools: Record<string, ToolDef> = {
     run: (a: { thang: string }, data) => {
       const ym = parseMonth(a.thang)
       if (data.months.some((x) => x.id === ym)) throw new ToolError(`${fmtMonth(ym)} đã mở rồi.`)
-      const act = data.members.filter((m) => m.active && m.monthlyFee > 0)
-      const mo = { id: ym, amounts: Object.fromEntries(act.map((m) => [m.id, m.monthlyFee])), createdAt: Date.now() }
-      return { text: `Đã mở quỹ ${fmtMonth(ym)} cho ${act.length} người, dự kiến thu ${money(act.reduce((s, m) => s + m.monthlyFee, 0))}.`, ops: [setOp('months', ym, mo)] }
+      const act = data.members.filter((m) => m.active && feeFor(m, ym) > 0)
+      const mo = { id: ym, amounts: Object.fromEntries(act.map((m) => [m.id, feeFor(m, ym)])), createdAt: Date.now() }
+      return { text: `Đã mở quỹ ${fmtMonth(ym)} cho ${act.length} người, dự kiến thu ${money(act.reduce((s, m) => s + feeFor(m, ym), 0))}.`, ops: [setOp('months', ym, mo)] }
     },
   },
 

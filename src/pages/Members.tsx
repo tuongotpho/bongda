@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { setPaid } from '../actions'
-import { fmtDate, getMemberAdvanceInfo, purgeMemberPlan, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
+import { feeFor, fmtDate, fmtMonth, getMemberAdvanceInfo, nextFeeChange, planFeeChange, purgeMemberPlan, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
+import { confirmDialog } from '../dialog'
 import { login, store } from '../store'
 import type { Member } from '../types'
 import { Icon } from '../icons'
@@ -18,6 +19,7 @@ interface Stat {
 }
 
 export default function Members() {
+  const thisYm = todayISO().slice(0, 7)
   const { data, obligations, canEdit, toast } = useApp()
   const [edit, setEdit] = useState<Member | 'new' | null>(null)
   const [showBulkAdd, setShowBulkAdd] = useState(false)
@@ -242,7 +244,12 @@ export default function Members() {
                           <span className="text-slate-200">{'★'.repeat(5 - m.skill)}</span>
                         </span>
                         <span>·</span>
-                        <span>{money(m.monthlyFee)}/tháng</span>
+                        <span>{money(feeFor(m, thisYm))}/tháng</span>
+                        {nextFeeChange(m, thisYm) && (
+                          <span className="text-sky-700">
+                            → {money(nextFeeChange(m, thisYm)!.fee)} từ {fmtMonth(nextFeeChange(m, thisYm)!.from)}
+                          </span>
+                        )}
                       </div>
                       <div className="mt-0.5 text-xs text-slate-500">
                         {st ? `${st.played} trận · ${st.won} thắng · ${st.drawn} hoà · ${st.lost} thua` : 'Chưa đá trận nào'}
@@ -352,7 +359,15 @@ function MemberModal({
   const [nm, setNm] = useState(member?.name ?? '')
   const [skill, setSkill] = useState(member?.skill ?? 3)
   const [isGK, setIsGK] = useState(member?.isGK ?? false)
-  const [fee, setFee] = useState(String(member?.monthlyFee ?? data.settings.monthlyFee))
+  const thisYm = todayISO().slice(0, 7)
+  const [fee, setFee] = useState(String(member ? feeFor(member, thisYm) : data.settings.monthlyFee))
+  // Đổi mức đóng của người cũ: áp dụng từ tháng nào (các tháng trước giữ mức cũ)
+  const [feeFrom, setFeeFrom] = useState(thisYm)
+  const validFrom = !!member && /^\d{4}-\d{2}$/.test(feeFrom)
+  const plan = validFrom ? planFeeChange(data, member!, Number(fee) || 0, feeFrom) : null
+  // Đổi mức, hoặc có tháng đã mở còn lệch mức (vd. vừa bỏ đánh dấu tháng đã đóng theo mức cũ)
+  const feeChanged = !!plan && ((Number(fee) || 0) !== feeFor(member!, feeFrom) || plan.months.length > 0)
+  const feePlan = feeChanged ? plan : null
   const [advanceAmount, setAdvanceAmount] = useState(
     member?.advanceAmount ? String(member.advanceAmount) : '',
   )
@@ -385,17 +400,30 @@ function MemberModal({
     }
 
     const monthlyFee = Number(fee) || 0
+    if (feePlan && (feePlan.months.length || feePlan.kept.length)) {
+      const ok = await confirmDialog({
+        title: `Đổi mức đóng thành ${money(monthlyFee)} từ ${fmtMonth(feeFrom)}?`,
+        message: [
+          feePlan.months.length && `Sửa số tiền phải đóng ở: ${feePlan.months.map((mo) => fmtMonth(mo.id)).join(', ')}.`,
+          feePlan.kept.length &&
+            `Đã đóng theo mức cũ nên giữ nguyên: ${feePlan.kept.map(fmtMonth).join(', ')}. Muốn thu đủ mức mới thì bỏ đánh dấu đã đóng tháng đó rồi mở lại thành viên này bấm Lưu.`,
+        ]
+          .filter(Boolean)
+          .join(' '),
+        confirmText: 'Đổi mức',
+      })
+      if (!ok) return
+    }
     const advAmt = advanceAmount.trim() ? Math.max(0, Number(advanceAmount)) : undefined
     const advDt = advAmt ? advanceDate || todayISO() : undefined
     const advNt = advAmt ? advanceNote.trim() || undefined : undefined
 
     const m: Member = member
       ? {
-          ...member,
+          ...(feePlan?.member ?? member),
           name: n,
           skill,
           isGK,
-          monthlyFee,
           advanceAmount: advAmt,
           advanceDate: advDt,
           advanceNote: advNt,
@@ -415,6 +443,7 @@ function MemberModal({
         }
 
     await store.put('members', m.id, m)
+    if (feePlan) await Promise.all(feePlan.months.map((mo) => store.put('months', mo.id, mo)))
     toast(member ? 'Đã lưu thông tin' : `Đã thêm thành viên "${n}"`)
 
     if (member) onClose()
@@ -471,7 +500,7 @@ function MemberModal({
       </Field>
 
       <Field
-        label="Mức đóng quỹ tháng (đồng)"
+        label={member ? `Mức đóng quỹ tháng (đồng) — đang áp dụng ${fmtMonth(thisYm)}` : 'Mức đóng quỹ tháng (đồng)'}
         hint={`${money(Number(fee) || 0)}/tháng · Điền 0 nếu được miễn đóng quỹ tháng.`}
       >
         <input
@@ -481,6 +510,35 @@ function MemberModal({
           className={inputCls}
         />
       </Field>
+
+      {member && (feeChanged || member.feeChanges?.length) && (
+        <div className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/70 p-3 text-xs text-amber-950">
+          {feeChanged && (
+            <>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">Áp dụng mức {money(Number(fee) || 0)} từ</span>
+                <input type="month" value={feeFrom} onChange={(e) => setFeeFrom(e.target.value)} className="rounded-lg border border-amber-300 bg-white px-2 py-1 text-xs" />
+              </div>
+              <p className="leading-relaxed">
+                Các tháng trước {fmtMonth(feeFrom)} giữ mức cũ.
+                {feePlan!.months.length > 0 && <> Sẽ sửa tháng đã mở: <b>{feePlan!.months.map((mo) => fmtMonth(mo.id)).join(', ')}</b>.</>}
+                {feePlan!.kept.length > 0 && <> Đã đóng mức cũ, giữ nguyên: <b>{feePlan!.kept.map(fmtMonth).join(', ')}</b> (muốn thu đủ thì bỏ đánh dấu đã đóng tháng đó rồi Lưu lại).</>}
+                {' '}Tháng mở sau này tự lấy mức mới.
+              </p>
+            </>
+          )}
+          {!!member.feeChanges?.length && (
+            <div className="text-amber-900/80">
+              <span className="font-semibold">Lịch sử mức đóng:</span> {money(member.monthlyFee)}
+              {member.feeChanges.map((c) => (
+                <span key={c.from}>
+                  {' '}→ {money(c.fee)} <span className="text-amber-700">từ {fmtMonth(c.from)}</span>
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <label className="flex cursor-pointer items-center gap-2.5 rounded-xl border border-slate-200 bg-slate-50/50 p-3 text-sm">
         <input
@@ -628,7 +686,7 @@ function MemberModal({
           <span className="min-w-0">
             <span className="block truncate">{member.name}</span>
             <span className="block truncate text-xs font-normal text-slate-500">
-              {'★'.repeat(member.skill)} · {money(member.monthlyFee)}/tháng{member.isGK ? ' · Bắt gôn' : ''} ·{' '}
+              {'★'.repeat(member.skill)} · {money(feeFor(member, thisYm))}/tháng{member.isGK ? ' · Bắt gôn' : ''} ·{' '}
               {member.active ? 'Đang đá' : 'Tạm nghỉ'}
             </span>
           </span>

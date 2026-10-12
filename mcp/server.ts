@@ -129,6 +129,7 @@ const schemas: Record<keyof typeof tools, z.ZodRawShape> = {
     sao: z.number().min(1).max(5).optional(),
     thu_mon: ok,
     muc_quy_thang: z.number().min(0).optional(),
+    tu_thang: z.string().optional().describe('Mức quỹ mới áp dụng từ tháng (10/2026); mặc định tháng này'),
     dang_da: ok.describe('false = cho tạm nghỉ'),
     tien_ung: z.number().min(0).optional().describe('Đặt lại TỔNG tiền đã ứng'),
     nap_them_ung: z.number().min(0).optional().describe('Cộng thêm vào tiền ứng'),

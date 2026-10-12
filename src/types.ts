@@ -8,6 +8,12 @@ export const FUND_NAMES: Record<FundId, string> = {
   extra: 'Quỹ ủng hộ & phạt',
 }
 
+export interface FeeChange {
+  /** YYYY-MM */
+  from: string
+  fee: number
+}
+
 export interface Member {
   id: string
   name: string
@@ -15,8 +21,10 @@ export interface Member {
   skill: number
   isGK: boolean
   active: boolean
-  /** Mức đóng quỹ tháng riêng của người này (sếp 500k–1tr, anh em 100k…) */
+  /** Mức đóng quỹ tháng riêng của người này (sếp 500k–1tr, anh em 100k…) — mức gốc, trước mọi lần đổi */
   monthlyFee: number
+  /** Các lần đổi mức đóng, tăng dần theo tháng: từ tháng `from` (YYYY-MM) đóng `fee`. Dùng feeFor() để lấy mức của một tháng */
+  feeChanges?: FeeChange[]
   createdAt: number
   /** Tiền ứng trước (tiền nộp trước để trừ dần khi thua trận) */
   advanceAmount?: number
