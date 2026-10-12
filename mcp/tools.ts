@@ -23,6 +23,7 @@ import {
   outcomeLabel,
   personalMessage,
   planMatchSave,
+  purgeMemberPlan,
   reminderMessage,
   splitTeams,
   todayISO,
@@ -608,7 +609,7 @@ export const tools: Record<string, ToolDef> = {
   xoa_thanh_vien: {
     title: 'Cho nghỉ / xoá thành viên',
     description:
-      'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn (tên trong trận cũ hiện "(đã xoá)"; khoản đã đóng vẫn giữ trong quỹ). Người còn nợ thì phải có xac_nhan_bo_no = true.',
+      'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn: xoá sạch dữ liệu người đó (gỡ khỏi tháng quỹ, đội hình trận cũ, xoá mọi khoản đã đóng → số dư quỹ giảm). Người còn nợ thì phải có xac_nhan_bo_no = true.',
     write: true,
     run: (a: { ten: string; xoa_han?: boolean; xac_nhan_bo_no?: boolean }, data) => {
       const m = findMember(data, a.ten)
@@ -619,7 +620,16 @@ export const tools: Record<string, ToolDef> = {
             'Xoá hẳn thì khoản nợ này biến khỏi danh sách nhắc. Gợi ý cho tạm nghỉ thay vì xoá; nếu người dùng vẫn muốn xoá thì gọi lại với xac_nhan_bo_no = true.',
         )
       if (!a.xoa_han) return { text: `Đã cho ${m.name} tạm nghỉ (không hiện khi chia đội, không tính quỹ tháng mới).`, ops: [setOp('members', m.id, { ...m, active: false })] }
-      return { text: `Đã xoá hẳn ${m.name}.`, ops: [delOp('members', m.id)] }
+      const plan = purgeMemberPlan(data, m.id)
+      return {
+        text: `Đã xoá hẳn ${m.name} cùng toàn bộ dữ liệu${plan.paidTotal ? ` (bỏ ${money(plan.paidTotal)} đã đóng khỏi quỹ)` : ''}.`,
+        ops: [
+          ...plan.months.map((mo) => setOp('months', mo.id, mo)),
+          ...plan.matches.map((x) => setOp('matches', x.id, x)),
+          ...plan.payments.map((p) => delOp('payments', p.id)),
+          delOp('members', m.id),
+        ],
+      }
     },
   },
 

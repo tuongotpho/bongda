@@ -1,4 +1,4 @@
-import type { AppData, Charge, FundId, Match, Member, Obligation, Payment } from './types'
+import type { AppData, Charge, FundId, FundMonth, Match, Member, Obligation, Payment } from './types'
 
 export const money = (n: number) => n.toLocaleString('vi-VN') + 'đ'
 
@@ -137,6 +137,31 @@ export function waterCharges(m: Match): Charge[] {
 }
 
 // ---------- Nghĩa vụ đóng tiền ----------
+
+/**
+ * Xoá hẳn thành viên: gỡ khỏi mọi tháng quỹ, đội hình, danh sách phạt sổ cũ và xoá mọi khoản đã đóng
+ * (số liệu gốc còn trên Google Sheet). Dọn luôn dữ liệu sót của người đã xoá trước đây.
+ */
+export function purgeMemberPlan(data: AppData, memberId: string) {
+  const keep = new Set(data.members.map((m) => m.id))
+  keep.delete(memberId)
+  const gone = (id: string) => !keep.has(id)
+  const months: FundMonth[] = []
+  for (const mo of data.months) {
+    if (!Object.keys(mo.amounts).some(gone)) continue
+    months.push({ ...mo, amounts: Object.fromEntries(Object.entries(mo.amounts).filter(([id]) => !gone(id))) })
+  }
+  const matches: Match[] = []
+  for (const m of data.matches) {
+    const teamA = (m.teamA || []).filter((id) => !gone(id))
+    const teamB = (m.teamB || []).filter((id) => !gone(id))
+    const charges = m.charges?.filter((c) => !gone(c.memberId))
+    if (teamA.length === (m.teamA || []).length && teamB.length === (m.teamB || []).length && charges?.length === m.charges?.length) continue
+    matches.push({ ...m, teamA, teamB, ...(charges ? { charges } : {}) })
+  }
+  const payments = data.payments.filter((p) => gone(p.memberId))
+  return { months, matches, payments, paidTotal: payments.filter((p) => p.memberId === memberId).reduce((s, p) => s + p.amount, 0) }
+}
 
 export function buildObligations(data: AppData): Obligation[] {
   const paid = new Set(data.payments.map((p) => p.id))

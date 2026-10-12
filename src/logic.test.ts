@@ -13,6 +13,7 @@ import {
   stalePayments,
   advanceHeld,
   outcomeLabel,
+  purgeMemberPlan,
   isPenaltyDecided,
   waterCharges,
 } from './logic'
@@ -294,4 +295,27 @@ describe('isLocked — chốt kết quả rồi thì không sửa', () => {
   it('chọn nhanh đội thắng không tỉ số cũng khoá', () => expect(isLocked(match({ scoreA: null, scoreB: null, winner: 'B' }))).toBe(true))
   it('trận nhập từ sổ cũ luôn khoá', () =>
     expect(isLocked(match({ scoreA: null, scoreB: null, teamA: [], teamB: [], charges: [{ memberId: 'a', amount: 20000 }] }))).toBe(true))
+})
+
+describe('purgeMemberPlan', () => {
+  it('xoá sạch người bị xoá và dữ liệu sót của người đã xoá trước đây', () => {
+    const d = data({
+      members: ['a', 'b', 'c'].map((id) => mem(id)), // 'd' đã xoá từ trước
+      matches: [match(), match({ id: 'm2', teamA: [], teamB: [], charges: [{ memberId: 'a', amount: 10000 }, { memberId: 'b', amount: 10000 }] }), match({ id: 'm3', teamA: ['b'], teamB: ['c'] })],
+      months: [{ id: '2026-10', amounts: { a: 100000, b: 100000, d: 100000 }, createdAt: 0 }, { id: '2026-11', amounts: { b: 100000 }, createdAt: 0 }],
+      payments: [
+        { id: 'monthly_2026-10_a', memberId: 'a', kind: 'monthly', refId: '2026-10', amount: 100000, paidAt: 0 },
+        { id: 'water_m1_c', memberId: 'c', kind: 'water', refId: 'm1', amount: 20000, paidAt: 0 },
+        { id: 'water_m1_d', memberId: 'd', kind: 'water', refId: 'm1', amount: 20000, paidAt: 0 },
+      ],
+    })
+    const plan = purgeMemberPlan(d, 'a')
+    expect(plan.months).toEqual([{ id: '2026-10', amounts: { b: 100000 }, createdAt: 0 }])
+    expect(plan.matches.map((m) => [m.id, m.teamA, m.teamB, m.charges])).toEqual([
+      ['m1', ['b'], ['c'], undefined],
+      ['m2', [], [], [{ memberId: 'b', amount: 10000 }]],
+    ])
+    expect(plan.payments.map((p) => p.id).sort()).toEqual(['monthly_2026-10_a', 'water_m1_d'])
+    expect(plan.paidTotal).toBe(100000)
+  })
 })

@@ -214,6 +214,8 @@ function PaidMatrix() {
   const ids = new Set(data.members.filter((m) => m.active && m.monthlyFee > 0).map((m) => m.id))
   for (const mo of data.months) if (mo.id.startsWith(`${year}-`)) Object.keys(mo.amounts).forEach((id) => ids.add(id))
   const rows = [...ids]
+    // Người đã xoá hẳn vẫn còn id trong các tháng cũ — bỏ khỏi bảng
+    .filter((id) => ctx.memberById.has(id))
     .map((id) => {
       const cells = slots.map((s) => obById.get(obligationId('monthly', s, id)))
       const owe = cells.reduce((sum, o) => sum + (o && !o.paid && o.refId <= thisYm ? o.amount : 0), 0)

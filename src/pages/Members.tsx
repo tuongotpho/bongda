@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { setPaid } from '../actions'
-import { fmtDate, getMemberAdvanceInfo, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
+import { fmtDate, getMemberAdvanceInfo, purgeMemberPlan, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
 import { login, store } from '../store'
 import type { Member } from '../types'
 import { Icon } from '../icons'
@@ -305,8 +305,16 @@ export default function Members() {
           onConfirm={async () => {
             const m = deleteConfirmMember
             try {
-              await store.remove('members', m.id)
-              toast(`Đã xóa thành viên "${m.name}" khỏi danh sách đội!`)
+              const plan = purgeMemberPlan(data, m.id)
+              await Promise.all([
+                ...plan.months.map((mo) => store.put('months', mo.id, mo)),
+                ...plan.matches.map((x) => store.put('matches', x.id, x)),
+              ])
+              await store.removeMany([
+                ...plan.payments.map((p) => ({ coll: 'payments' as const, id: p.id })),
+                { coll: 'members', id: m.id },
+              ])
+              toast(`Đã xóa hẳn "${m.name}" cùng toàn bộ dữ liệu`)
               setDeleteConfirmMember(null)
             } catch (err: any) {
               console.error('Lỗi khi xóa thành viên:', err)
@@ -863,6 +871,7 @@ function ConfirmDeleteModal({
   const monthsCount = data.months.filter((mo) => member.id in (mo.amounts || {})).length
   const paymentsCount = data.payments.filter((p) => p.memberId === member.id).length
   const hasHistory = matchesCount > 0 || monthsCount > 0 || paymentsCount > 0
+  const { paidTotal } = purgeMemberPlan(data, member.id)
 
   return (
     <Modal title={`Xác nhận xóa: ${member.name}`} onClose={onClose} zIndex="z-60">
@@ -893,7 +902,8 @@ function ConfirmDeleteModal({
               Cầu thủ này đã có lịch sử trong đội
             </div>
             <p className="leading-relaxed">
-              Nếu bạn <b>XÓA HẲN</b>, tên cầu thủ này vẫn hiển thị là <i>(đã xoá)</i> trong các trận cũ để không làm lệch quỹ.<br />
+              Nếu bạn <b>XÓA HẲN</b>, toàn bộ dữ liệu của người này bị xoá sạch: gỡ khỏi các tháng quỹ, đội hình các trận cũ và
+              xoá mọi khoản đã đóng{paidTotal > 0 && <> — <b>số dư quỹ sẽ giảm {money(paidTotal)}</b></>}. Không hoàn tác được.<br />
               <b>Khuyên dùng:</b> Nếu người này chỉ nghỉ đá một thời gian, hãy chọn <b>"Cho tạm nghỉ"</b> để giữ lại tên và lịch sử đẹp trong sổ.
             </p>
           </div>
