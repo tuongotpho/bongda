@@ -343,14 +343,16 @@ export default function Members() {
   )
 }
 
-function MemberModal({
+export function MemberModal({
   member,
   onClose,
   onDeleteMember,
+  zIndex,
 }: {
   member: Member | null
   onClose: () => void
   onDeleteMember?: (m: Member) => void
+  zIndex?: string
 }) {
   const { data, obligations, canEdit, toast } = useApp()
   const [nm, setNm] = useState(member?.name ?? '')
@@ -676,6 +678,7 @@ function MemberModal({
   return (
     <Modal
       wide
+      zIndex={zIndex}
       onClose={onClose}
       title={
         <span className="flex min-w-0 items-center gap-2.5">
@@ -701,9 +704,11 @@ function MemberModal({
           <Btn kind="ghost" className="border border-slate-200 text-xs" onClick={() => save({ active: !member.active })}>
             {member.active ? '⏸️ Cho tạm nghỉ' : '▶️ Kích hoạt lại'}
           </Btn>
-          <Btn kind="danger" className="border border-red-200 text-xs" onClick={del}>
-            <Icon name="trash" className="h-3.5 w-3.5" /> Xóa
-          </Btn>
+          {onDeleteMember && (
+            <Btn kind="danger" className="border border-red-200 text-xs" onClick={del}>
+              <Icon name="trash" className="h-3.5 w-3.5" /> Xóa
+            </Btn>
+          )}
           <Btn className="ml-auto px-4 sm:px-6" onClick={() => save()}>
             Lưu thay đổi
           </Btn>

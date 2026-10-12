@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { buildObligations } from './logic'
 import Fund from './pages/Fund'
 import Matches from './pages/Matches'
-import Members from './pages/Members'
+import Members, { MemberModal } from './pages/Members'
 import Overview from './pages/Overview'
 import SettingsModal from './pages/Settings'
 import Split from './pages/Split'
@@ -40,6 +40,7 @@ export default function App() {
   const [ready, setReady] = useState(false)
   const [auth, setAuth] = useState<AuthState>({ user: null, isAdmin: false })
   const [tab, setTab] = useState(initialTab)
+  const [viewMember, setViewMember] = useState<string | null>(null)
   const [editMatchId, setEditMatchId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [authError, setAuthError] = useState<{ code: string; message: string; domain?: string } | null>(null)
@@ -141,6 +142,7 @@ export default function App() {
       memberById: new Map(data.members.map((m) => [m.id, m])),
       toast,
       login: doLogin,
+      openMember: setViewMember,
     }),
     [data, auth.isAdmin, toast, doLogin],
   )
@@ -296,6 +298,9 @@ export default function App() {
         </nav>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {viewMember && ctx.memberById.get(viewMember) && (
+        <MemberModal key={viewMember} member={ctx.memberById.get(viewMember)!} zIndex="z-60" onClose={() => setViewMember(null)} />
+      )}
       {authError && (
         <Modal title="Lỗi đăng nhập Thủ quỹ" onClose={() => setAuthError(null)}>
           <div className="space-y-4 text-sm text-slate-700">

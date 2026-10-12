@@ -3,7 +3,7 @@ import { setPaid } from '../actions'
 import { debtors, fmtDate, fundSummary, getMemberAdvanceInfo, getPenaltyWinner, isPenaltyDecided, matchOutcome, money, personalMessage, reminderMessage } from '../logic'
 import { Icon, type IconName } from '../icons'
 import { FUND_NAMES } from '../types'
-import { Avatar, Btn, Card, Empty, Modal, copyText, inputCls, useApp } from '../ui'
+import { Avatar, Btn, Card, Empty, MemberLink, Modal, copyText, inputCls, useApp } from '../ui'
 
 /** Số người nợ hiện sẵn — còn lại bấm "Xem thêm" */
 const PREVIEW = 6
@@ -107,7 +107,7 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
                     <Avatar name={d.member.name} />
                     <div className="min-w-0 flex-1">
                       <div className="flex items-baseline justify-between gap-2">
-                        <span className="truncate font-semibold text-slate-900">{d.member.name}</span>
+                        <MemberLink id={d.member.id} className="truncate font-semibold text-slate-900" />
                         <span className="shrink-0 font-bold text-red-600">{money(d.total)}</span>
                       </div>
                       <div className="mt-1.5 flex flex-wrap items-center gap-1.5">

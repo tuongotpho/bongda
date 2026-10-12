@@ -5,7 +5,7 @@ import { store } from '../store'
 import { FUND_NAMES, type Expense, type FundId, type FundMonth, type Income } from '../types'
 import { Icon } from '../icons'
 import { confirmDialog } from '../dialog'
-import { Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, name, useApp } from '../ui'
+import { Btn, Card, Empty, Field, MemberLink, Modal, PaidBadge, inputCls, name, useApp } from '../ui'
 import { PayToggle } from './Matches'
 import ImageShareModal from '../ImageShareModal'
 import { generatePaidMatrixImage, type MatrixCell } from '../reportImage'
@@ -312,7 +312,7 @@ function PaidMatrix() {
               {rows.map((r, idx) => (
                 <tr key={r.id} className="group">
                   <td className="sticky left-0 z-10 max-w-[11rem] truncate border-t border-slate-100 bg-white py-1.5 pr-3 font-medium text-slate-800 group-hover:bg-slate-50">
-                    <span className="inline-block w-7 text-center text-xs font-normal text-slate-400 tabular-nums">{idx + 1}</span> {name(ctx, r.id)}
+                    <span className="inline-block w-7 text-center text-xs font-normal text-slate-400 tabular-nums">{idx + 1}</span> <MemberLink id={r.id} />
                     <span className="ml-1 text-[11px] font-normal text-slate-400">
                       {r.paid}/{r.total}
                     </span>
@@ -466,7 +466,7 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
             return (
               <li key={o.id} className="flex items-center justify-between gap-2 py-2">
                 <div>
-                  <div>{name(ctx, o.memberId)}</div>
+                  <MemberLink id={o.memberId} />
                   <div className="text-xs text-slate-500">
                     Mức {money(o.amount)}
                     {p && p.amount !== o.amount && ` · nộp ${money(p.amount)}`}

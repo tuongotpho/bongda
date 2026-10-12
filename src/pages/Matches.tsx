@@ -5,7 +5,7 @@ import { ADVANCE_NOTE, fmtDate, getMemberAdvanceInfo, getPenaltyWinner, isAdvanc
 import type { Match, Member } from '../types'
 import { Icon } from '../icons'
 import { confirmDialog } from '../dialog'
-import { Btn, Card, Field, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
+import { Btn, Card, Field, MemberLink, Modal, PaidBadge, copyText, inputCls, name, useApp } from '../ui'
 
 // Phần xuất ảnh chỉ tải khi bấm nút — app mở nhanh hơn
 const LineupImageModal = lazy(() => import('../LineupImageModal'))
@@ -925,7 +925,7 @@ function MatchModal({
                         </span>
                         <div>
                           <div className="flex items-center gap-1.5 font-semibold text-slate-800">
-                            <span>{name(ctx, x.memberId)}</span>
+                            <MemberLink id={x.memberId} />
                             {isFromAdv && (
                               <span className="rounded-md bg-sky-100 px-1.5 py-0.5 text-[10px] font-bold text-sky-800">
                                 Đã trừ tiền ứng

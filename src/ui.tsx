@@ -10,12 +10,32 @@ export interface Ctx {
   memberById: Map<string, Member>
   toast: (msg: string) => void
   login?: () => void
+  /** Mở modal chi tiết thành viên từ bất kỳ màn hình nào */
+  openMember: (id: string) => void
 }
 
 export const AppCtx = createContext<Ctx>(null as unknown as Ctx)
 export const useApp = () => useContext(AppCtx)
 
 export const name = (ctx: Ctx, id: string) => ctx.memberById.get(id)?.name ?? '(đã xoá)'
+
+/** Tên thành viên bấm được → mở chi tiết. Người đã xoá thì chỉ hiện chữ. */
+export function MemberLink({ id, className = '' }: { id: string; className?: string }) {
+  const ctx = useApp()
+  if (!ctx.memberById.has(id)) return <span className={className}>{name(ctx, id)}</span>
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        ctx.openMember(id)
+      }}
+      className={`cursor-pointer text-left hover:text-green-700 hover:underline ${className}`}
+    >
+      {name(ctx, id)}
+    </button>
+  )
+}
 
 export function Card({
   title,
@@ -70,6 +90,8 @@ export function Field({ label, children, hint }: { label: string; children: Reac
   )
 }
 
+const modalStack: symbol[] = []
+
 export function Modal({
   title,
   onClose,
@@ -89,11 +111,19 @@ export function Modal({
   /** chân modal dính đáy, luôn thấy khi cuộn */
   footer?: ReactNode
 }) {
+  // Modal chồng nhau: Esc chỉ đóng modal trên cùng
+  const [token] = useState(() => Symbol())
   useEffect(() => {
-    const h = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
+    modalStack.push(token)
+    return () => {
+      modalStack.splice(modalStack.indexOf(token), 1)
+    }
+  }, [token])
+  useEffect(() => {
+    const h = (e: KeyboardEvent) => e.key === 'Escape' && modalStack.at(-1) === token && onClose()
     window.addEventListener('keydown', h)
     return () => window.removeEventListener('keydown', h)
-  }, [onClose])
+  }, [onClose, token])
 
   const modalEl = (
     <div className={`fixed inset-0 ${zIndex} flex items-end justify-center bg-slate-900/60 backdrop-blur-sm sm:items-center`} onClick={onClose}>
