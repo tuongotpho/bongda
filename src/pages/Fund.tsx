@@ -65,6 +65,8 @@ export default function Fund() {
       <Ledger />
       </div>
 
+      <PaidMatrix />
+
       {creating && <CreateMonth initial={creating} onClose={() => setCreating(null)} />}
       {month && <MonthModal mo={month} onClose={() => setOpenMonth(null)} />}
       {entry && <AddEntry {...entry} onClose={() => setEntry(null)} />}
@@ -187,6 +189,152 @@ function MonthsCard({
           Đã thu <b className="text-green-700">{money(collected)}</b> / {money(expected)}
         </span>
       </div>
+    </Card>
+  )
+}
+
+/** Bảng tổng hợp quỹ tháng: mỗi dòng một thành viên, mỗi cột một tháng — nhìn là biết ai đã đóng tháng nào */
+function PaidMatrix() {
+  const ctx = useApp()
+  const { data, obligations, canEdit, toast } = ctx
+  const thisYear = Number(todayISO().slice(0, 4))
+  const thisYm = todayISO().slice(0, 7)
+  const years = useMemo(
+    () => [...new Set([thisYear, thisYear + 1, ...data.months.map((m) => Number(m.id.slice(0, 4)))])].sort((a, b) => a - b),
+    [data.months, thisYear],
+  )
+  const [year, setYear] = useState(thisYear)
+  const [onlyOwe, setOnlyOwe] = useState(false)
+
+  const slots = Array.from({ length: 12 }, (_, i) => `${year}-${String(i + 1).padStart(2, '0')}`)
+  const opened = new Set(data.months.map((m) => m.id))
+  const obById = new Map(obligations.filter((o) => o.kind === 'monthly').map((o) => [o.id, o]))
+
+  // Ai có trong một tháng của năm (kể cả đã nghỉ), cộng người đang đá có mức quỹ
+  const ids = new Set(data.members.filter((m) => m.active && m.monthlyFee > 0).map((m) => m.id))
+  for (const mo of data.months) if (mo.id.startsWith(`${year}-`)) Object.keys(mo.amounts).forEach((id) => ids.add(id))
+  const rows = [...ids]
+    .map((id) => {
+      const cells = slots.map((s) => obById.get(obligationId('monthly', s, id)))
+      const owe = cells.reduce((sum, o) => sum + (o && !o.paid && o.refId <= thisYm ? o.amount : 0), 0)
+      return { id, cells, owe, paid: cells.filter((o) => o?.paid).length, total: cells.filter(Boolean).length }
+    })
+    .filter((r) => !onlyOwe || r.owe > 0)
+    .sort((a, b) => name(ctx, a.id).localeCompare(name(ctx, b.id), 'vi'))
+
+  const toggle = async (o: NonNullable<(typeof rows)[number]['cells'][number]>) => {
+    if (!canEdit) return
+    const who = name(ctx, o.memberId)
+    if (o.paid) {
+      const ok = await confirmDialog({
+        title: `Bỏ đánh dấu đã đóng?`,
+        message: `${who} — ${o.label} (${money(o.amount)}) sẽ chuyển về chưa đóng, khoản đã thu bị xoá khỏi sổ.`,
+        confirmText: 'Bỏ đánh dấu',
+        tone: 'warning',
+      })
+      if (!ok) return
+    }
+    await setPaid(o, !o.paid)
+    toast(o.paid ? `${who}: ${o.label} → chưa đóng` : `${who} đã đóng ${o.label}`)
+  }
+
+  return (
+    <Card
+      title="Bảng tổng hợp quỹ tháng"
+      subtitle={canEdit ? 'Bấm vào ô để đánh dấu đã đóng / chưa đóng' : 'Ai đã đóng tháng nào'}
+      right={
+        <>
+          <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
+            <input type="checkbox" checked={onlyOwe} onChange={(e) => setOnlyOwe(e.target.checked)} className="h-3.5 w-3.5 accent-green-700" />
+            Chỉ người còn nợ
+          </label>
+          <YearPicker years={years} year={year} onChange={setYear} />
+        </>
+      }
+    >
+      {!rows.length ? (
+        <Empty>{onlyOwe ? 'Không ai còn nợ quỹ năm này.' : 'Chưa có thành viên đóng quỹ.'}</Empty>
+      ) : (
+        <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
+          <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
+            <thead>
+              <tr className="text-[11px] font-semibold text-slate-500">
+                <th className="sticky left-0 z-10 bg-white py-2 pr-3 text-left">Thành viên</th>
+                {slots.map((s) => (
+                  <th key={s} className={`px-0.5 py-2 text-center ${s === thisYm ? 'text-green-700' : opened.has(s) ? '' : 'text-slate-300'}`}>
+                    T{Number(s.slice(5))}
+                  </th>
+                ))}
+                <th className="py-2 pl-3 text-right">Còn nợ</th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="group">
+                  <td className="sticky left-0 z-10 max-w-[9rem] truncate border-t border-slate-100 bg-white py-1.5 pr-3 font-medium text-slate-800 group-hover:bg-slate-50">
+                    {name(ctx, r.id)}
+                    <span className="ml-1 text-[11px] font-normal text-slate-400">
+                      {r.paid}/{r.total}
+                    </span>
+                  </td>
+                  {r.cells.map((o, i) => {
+                    const s = slots[i]
+                    if (!o)
+                      return (
+                        <td key={s} className="border-t border-slate-100 px-0.5 py-1.5 text-center text-slate-300 group-hover:bg-slate-50" title={opened.has(s) ? 'Không phải đóng tháng này' : 'Chưa mở quỹ'}>
+                          {opened.has(s) ? '–' : ''}
+                        </td>
+                      )
+                    const future = s > thisYm
+                    const tone = o.paid
+                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      : future
+                        ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200 ring-inset hover:bg-amber-100'
+                        : 'bg-red-50 text-red-600 ring-1 ring-red-200 ring-inset hover:bg-red-100'
+                    return (
+                      <td key={s} className="border-t border-slate-100 px-0.5 py-1.5 text-center group-hover:bg-slate-50">
+                        <button
+                          onClick={() => toggle(o)}
+                          disabled={!canEdit}
+                          title={`${name(ctx, r.id)} · ${o.label} · ${money(o.amount)} · ${o.paid ? 'đã đóng' : future ? 'chưa tới tháng' : 'chưa đóng'}`}
+                          className={`mx-auto grid h-7 w-7 place-items-center rounded-lg text-xs font-bold transition disabled:cursor-default ${canEdit ? 'cursor-pointer' : ''} ${tone}`}
+                        >
+                          {o.paid ? '✓' : future ? '·' : '✕'}
+                        </button>
+                      </td>
+                    )
+                  })}
+                  <td className={`border-t border-slate-100 py-1.5 pl-3 text-right text-xs font-bold whitespace-nowrap group-hover:bg-slate-50 ${r.owe ? 'text-red-600' : 'text-green-700'}`}>
+                    {r.owe ? money(r.owe) : 'Đủ'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="text-[11px] text-slate-500">
+                <td className="sticky left-0 z-10 border-t border-slate-200 bg-white py-2 pr-3 font-semibold">Đã đóng</td>
+                {slots.map((s, i) => {
+                  const cs = rows.map((r) => r.cells[i]).filter(Boolean)
+                  return (
+                    <td key={s} className="border-t border-slate-200 py-2 text-center tabular-nums">
+                      {cs.length ? `${cs.filter((o) => o!.paid).length}/${cs.length}` : ''}
+                    </td>
+                  )
+                })}
+                <td className="border-t border-slate-200 py-2 pl-3 text-right font-bold whitespace-nowrap text-red-600">
+                  {money(rows.reduce((s, r) => s + r.owe, 0))}
+                </td>
+              </tr>
+            </tfoot>
+          </table>
+          <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
+            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-green-600 align-[-2px]" />Đã đóng</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-red-50 ring-1 ring-red-200 ring-inset align-[-2px]" />Chưa đóng</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-amber-50 ring-1 ring-amber-200 ring-inset align-[-2px]" />Mở sớm, chưa tới tháng (không tính nợ)</span>
+            <span>– Miễn / không phải đóng</span>
+          </div>
+        </div>
+      )}
     </Card>
   )
 }
