@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { Icon } from './icons'
 import { Btn, Modal, useApp } from './ui'
 
@@ -7,11 +7,15 @@ export default function ImageShareModal({
   title,
   fileName,
   generate,
+  header,
   onClose,
 }: {
   title: string
   fileName: string
+  /** Chỉ chạy một lần — muốn vẽ lại thì đổi `key` của modal */
   generate: () => HTMLCanvasElement | Promise<HTMLCanvasElement>
+  /** Tuỳ chọn hiện phía trên ảnh (vd. nút chọn kiểu ảnh) */
+  header?: ReactNode
   onClose: () => void
 }) {
   const { toast } = useApp()
@@ -73,6 +77,7 @@ export default function ImageShareModal({
 
   return (
     <Modal title={title} onClose={onClose} zIndex="z-60">
+      {header}
       {failed ? (
         <div className="py-8 text-center text-sm text-red-600">Không tạo được ảnh. Thử lại nhé.</div>
       ) : !url ? (

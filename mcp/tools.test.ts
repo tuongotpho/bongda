@@ -142,3 +142,25 @@ describe('MCP: gạch nợ, quỹ tháng, thu chi', () => {
     expect(call(d, 'xoa_thanh_vien', { ten: 'hung', xoa_han: true, xac_nhan_bo_no: true }).data.members.some((m) => m.id === 'h')).toBe(false)
   })
 })
+
+describe('MCP: danh sách thành viên', () => {
+  it('hiện mức quỹ hiện tại, mức trước đó và lần đổi sắp tới', () => {
+    const d = base()
+    d.members[0] = mem('h', 'Anh Hùng', { feeChanges: [{ from: '2020-01', fee: 500000 }, { from: '2099-01', fee: 300000 }] })
+    const line = tools.thanh_vien.run({}, d).text.split('\n').find((l) => l.startsWith('Anh Hùng'))
+    expect(line).toContain('quỹ 500.000đ/tháng (từ T1/2020, trước 100.000đ) → 300.000đ từ T1/2099')
+  })
+})
+
+describe('MCP: xoá hẳn thành viên', () => {
+  it('giữ tiền đã đóng trong số dư quỹ', () => {
+    let d = call(base(), 'mo_quy_thang', { thang: '10/2026' }).data
+    d = call(d, 'gach_no', { ten: 'hung', tat_ca: true }).data
+    const before = fundSummary(d).main.balance
+    const r = call(d, 'xoa_thanh_vien', { ten: 'hung', xoa_han: true })
+    expect(r.text).toContain('giữ 100.000đ đã đóng trong quỹ')
+    expect(r.ops.some((o) => o.kind === 'delete' && o.coll === 'payments')).toBe(false)
+    expect(fundSummary(r.data).main.balance).toBe(before)
+    expect(r.data.months[0].amounts).not.toHaveProperty('h')
+  })
+})

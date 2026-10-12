@@ -85,13 +85,7 @@ export function matchOutcome(m: Match): MatchOutcome {
     return 'pending'
   }
   // Khi hòa: xét kết quả đá luân lưu penalty nếu có
-  if (m.penaltyWinner === 'A') return 'A'
-  if (m.penaltyWinner === 'B') return 'B'
-  if (m.penaltyScoreA != null && m.penaltyScoreB != null) {
-    if (m.penaltyScoreA > m.penaltyScoreB) return 'A'
-    if (m.penaltyScoreB > m.penaltyScoreA) return 'B'
-  }
-  return 'draw'
+  return getPenaltyWinner(m) ?? 'draw'
 }
 
 /** Trận đã chốt kết quả (hoặc nhập từ sổ cũ) thì không sửa nữa — ghi nhầm thì xoá trận, tạo lại. Web và MCP dùng chung. */
@@ -104,12 +98,7 @@ export function outcomeLabel(m: Match): string {
 }
 
 /** Kiểm tra trận đấu có phân định bằng đá luân lưu penalty khi hòa tỉ số không */
-export function isPenaltyDecided(m: Match): boolean {
-  if (!isTied(m)) return false
-  if (m.penaltyWinner === 'A' || m.penaltyWinner === 'B') return true
-  if (m.penaltyScoreA != null && m.penaltyScoreB != null && m.penaltyScoreA !== m.penaltyScoreB) return true
-  return false
-}
+export const isPenaltyDecided = (m: Match) => getPenaltyWinner(m) != null
 
 /** Lấy đội thắng luân lưu penalty: 'A' | 'B' | null */
 export function getPenaltyWinner(m: Match): 'A' | 'B' | null {
@@ -184,8 +173,8 @@ export function planFeeChange(data: AppData, m: Member, fee: number, from: strin
 }
 
 /**
- * Xoá hẳn thành viên: gỡ khỏi mọi tháng quỹ, đội hình, danh sách phạt sổ cũ và xoá mọi khoản đã đóng
- * (số liệu gốc còn trên Google Sheet). Dọn luôn dữ liệu sót của người đã xoá trước đây.
+ * Xoá hẳn thành viên: gỡ khỏi mọi tháng quỹ, đội hình, danh sách phạt sổ cũ. Dọn luôn dữ liệu sót của người đã xoá trước đây.
+ * KHÔNG xoá khoản đã đóng: tiền đã vào quỹ thật nên số dư quỹ phải giữ nguyên (`paidTotal` để báo cho người dùng).
  */
 export function purgeMemberPlan(data: AppData, memberId: string) {
   const keep = new Set(data.members.map((m) => m.id))
@@ -204,8 +193,8 @@ export function purgeMemberPlan(data: AppData, memberId: string) {
     if (teamA.length === (m.teamA || []).length && teamB.length === (m.teamB || []).length && charges?.length === m.charges?.length) continue
     matches.push({ ...m, teamA, teamB, ...(charges ? { charges } : {}) })
   }
-  const payments = data.payments.filter((p) => gone(p.memberId))
-  return { months, matches, payments, paidTotal: payments.filter((p) => p.memberId === memberId).reduce((s, p) => s + p.amount, 0) }
+  const paidTotal = data.payments.filter((p) => p.memberId === memberId).reduce((s, p) => s + p.amount, 0)
+  return { months, matches, paidTotal }
 }
 
 export function buildObligations(data: AppData): Obligation[] {

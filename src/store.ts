@@ -6,10 +6,7 @@
 import { initializeApp } from 'firebase/app'
 import { GoogleAuthProvider, getAuth, onAuthStateChanged, signInWithPopup, signOut, type User } from 'firebase/auth'
 import { collection, deleteDoc, doc, getDocs, getFirestore, onSnapshot, setDoc, writeBatch } from 'firebase/firestore'
-import { DEFAULT_SETTINGS, type AppData, type Settings } from './types'
-
-export type Coll = 'members' | 'matches' | 'months' | 'payments' | 'expenses' | 'incomes'
-export const COLLS: Coll[] = ['members', 'matches', 'months', 'payments', 'expenses', 'incomes']
+import { COLLS, DEFAULT_SETTINGS, type AppData, type Coll, type Settings } from './types'
 
 const env = import.meta.env
 const fbConfig = {

@@ -18,14 +18,13 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { applicationDefault, initializeApp } from 'firebase-admin/app'
 import { getFirestore } from 'firebase-admin/firestore'
 import { z } from 'zod'
-import { DEFAULT_SETTINGS, type AppData, type Settings } from '../src/types'
+import { COLLS, DEFAULT_SETTINGS, type AppData, type Settings } from '../src/types'
 import { ToolError, tools, type Op } from './tools'
 
 const PROJECT = process.env.BONGDA_PROJECT || 'app-from-ai'
 const DATABASE = process.env.BONGDA_DATABASE || 'bongda'
 const READONLY = process.env.BONGDA_READONLY === '1'
 const AUDIT = join(dirname(fileURLToPath(import.meta.url)), 'audit.log')
-const COLLS = ['members', 'matches', 'months', 'payments', 'expenses', 'incomes'] as const
 
 if (DATABASE === '(default)') throw new Error('Không dùng database (default) — project app-from-ai dùng chung với app khác.')
 

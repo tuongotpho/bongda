@@ -317,11 +317,8 @@ export default function Members() {
                 ...plan.months.map((mo) => store.put('months', mo.id, mo)),
                 ...plan.matches.map((x) => store.put('matches', x.id, x)),
               ])
-              await store.removeMany([
-                ...plan.payments.map((p) => ({ coll: 'payments' as const, id: p.id })),
-                { coll: 'members', id: m.id },
-              ])
-              toast(`Đã xóa hẳn "${m.name}" cùng toàn bộ dữ liệu`)
+              await store.remove('members', m.id)
+              toast(`Đã xóa hẳn "${m.name}"${plan.paidTotal ? ` — giữ ${money(plan.paidTotal)} đã đóng trong quỹ` : ''}`)
               setDeleteConfirmMember(null)
             } catch (err: any) {
               console.error('Lỗi khi xóa thành viên:', err)
@@ -960,8 +957,9 @@ function ConfirmDeleteModal({
               Cầu thủ này đã có lịch sử trong đội
             </div>
             <p className="leading-relaxed">
-              Nếu bạn <b>XÓA HẲN</b>, toàn bộ dữ liệu của người này bị xoá sạch: gỡ khỏi các tháng quỹ, đội hình các trận cũ và
-              xoá mọi khoản đã đóng{paidTotal > 0 && <> — <b>số dư quỹ sẽ giảm {money(paidTotal)}</b></>}. Không hoàn tác được.<br />
+              Nếu bạn <b>XÓA HẲN</b>, người này bị gỡ khỏi danh sách, các tháng quỹ và đội hình các trận cũ. Không hoàn tác được.
+              {paidTotal > 0 && <> Tiền đã đóng (<b>{money(paidTotal)}</b>) vẫn giữ trong số dư quỹ.</>}
+              <br />
               <b>Khuyên dùng:</b> Nếu người này chỉ nghỉ đá một thời gian, hãy chọn <b>"Cho tạm nghỉ"</b> để giữ lại tên và lịch sử đẹp trong sổ.
             </p>
           </div>

@@ -27,10 +27,6 @@ dist-ssr
 .env
 .firebase
 
-# Firebase
-.env
-.firebase
-
 # Dữ liệu tài chính thật của đội — không đưa lên git
 import/
 

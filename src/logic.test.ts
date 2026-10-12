@@ -300,7 +300,7 @@ describe('isLocked — chốt kết quả rồi thì không sửa', () => {
 })
 
 describe('purgeMemberPlan', () => {
-  it('xoá sạch người bị xoá và dữ liệu sót của người đã xoá trước đây', () => {
+  it('gỡ người bị xoá (và người đã xoá trước đây) khỏi tháng quỹ/trận, giữ tiền đã đóng', () => {
     const d = data({
       members: ['a', 'b', 'c'].map((id) => mem(id)), // 'd' đã xoá từ trước
       matches: [match(), match({ id: 'm2', teamA: [], teamB: [], charges: [{ memberId: 'a', amount: 10000 }, { memberId: 'b', amount: 10000 }] }), match({ id: 'm3', teamA: ['b'], teamB: ['c'] })],
@@ -317,7 +317,7 @@ describe('purgeMemberPlan', () => {
       ['m1', ['b'], ['c'], undefined],
       ['m2', [], [], [{ memberId: 'b', amount: 10000 }]],
     ])
-    expect(plan.payments.map((p) => p.id).sort()).toEqual(['monthly_2026-10_a', 'water_m1_d'])
+    expect(plan).not.toHaveProperty('payments') // tiền đã đóng giữ nguyên trong quỹ
     expect(plan.paidTotal).toBe(100000)
   })
 })

@@ -20,7 +20,7 @@ import {
   matchOutcome,
   money,
   newId,
-  obligationId,
+  nextFeeChange,
   outcomeLabel,
   personalMessage,
   planFeeChange,
@@ -31,9 +31,8 @@ import {
   todayISO,
   waterCharges,
 } from '../src/logic'
-import { FUND_NAMES, type AppData, type DrawRule, type FundId, type Match, type Member, type Obligation, type Payment, type Settings } from '../src/types'
+import { FUND_NAMES, type AppData, type Coll, type DrawRule, type FundId, type Match, type Member, type Obligation, type Payment, type Settings } from '../src/types'
 
-export type Coll = 'members' | 'matches' | 'months' | 'payments' | 'expenses' | 'incomes'
 export type Op = { kind: 'set'; coll: Coll; id: string; data: object } | { kind: 'delete'; coll: Coll; id: string } | { kind: 'settings'; data: Settings }
 export interface Result {
   text: string
@@ -112,10 +111,27 @@ export function parseMonth(q: string): string {
 
 // ---------- Mô tả ----------
 
+/** "quỹ 500.000đ/tháng (từ T10/2026, trước 100.000đ) → 300.000đ từ T1/2027" */
+function feeLine(m: Member, ym: string) {
+  const now = feeFor(m, ym)
+  const last = (m.feeChanges ?? []).filter((c) => c.from <= ym).at(-1)
+  const next = nextFeeChange(m, ym)
+  return (
+    `quỹ ${money(now)}/tháng` +
+    (last ? ` (từ ${fmtMonth(last.from)}, trước ${money(feeFor(m, prevMonth(last.from)))})` : '') +
+    (next ? ` → ${money(next.fee)} từ ${fmtMonth(next.from)}` : '')
+  )
+}
+
+const prevMonth = (ym: string) => {
+  const [y, mo] = ym.split('-').map(Number)
+  return mo === 1 ? `${y - 1}-12` : `${y}-${String(mo - 1).padStart(2, '0')}`
+}
+
 const nameOf = (data: AppData, id: string) => data.members.find((m) => m.id === id)?.name ?? '(đã xoá)'
 const names = (data: AppData, ids: string[]) => ids.map((id) => nameOf(data, id)).join(', ') || '(trống)'
 
-function matchLine(data: AppData, m: Match, obs: Obligation[]) {
+function matchLine(m: Match, obs: Obligation[]) {
   const mine = obs.filter((o) => o.kind === 'water' && o.refId === m.id)
   const unpaid = mine.filter((o) => !o.paid)
   const score = m.scoreA != null ? `${m.scoreA}–${m.scoreB}` : ''
@@ -129,7 +145,7 @@ function matchLine(data: AppData, m: Match, obs: Obligation[]) {
 
 function matchDetail(data: AppData, m: Match) {
   const obs = buildObligations(data).filter((o) => o.kind === 'water' && o.refId === m.id)
-  const lines = [matchLine(data, m, obs)]
+  const lines = [matchLine(m, obs)]
   if (!m.charges) {
     lines.push(`Đội A (${m.teamA.length}): ${names(data, m.teamA)}`)
     lines.push(`Đội B (${m.teamB.length}): ${names(data, m.teamB)}`)
@@ -243,7 +259,7 @@ export const tools: Record<string, ToolDef> = {
         `Còn thiếu: ${money(list.reduce((s, d) => s + d.total, 0))} · ${list.length} người chưa đóng đủ`,
         `Thành viên: ${data.members.filter((m) => m.active).length} đang đá / ${data.members.length} · ${data.matches.length} trận đã ghi`,
       ]
-      if (last) lines.push(`Trận gần nhất: ${matchLine(data, last, obs)}`)
+      if (last) lines.push(`Trận gần nhất: ${matchLine(last, obs)}`)
       return { text: lines.join('\n') }
     },
   },
@@ -308,7 +324,7 @@ export const tools: Record<string, ToolDef> = {
             return [
               `${m.name}${m.isGK ? ' (thủ môn)' : ''}${m.active ? '' : ' [tạm nghỉ]'}`,
               `${m.skill}★`,
-              `quỹ ${money(feeFor(m, todayISO().slice(0, 7)))}/tháng${(m.feeChanges ?? []).map((c) => ` (từ ${fmtMonth(c.from)}: ${money(c.fee)})`).join('')}`,
+              feeLine(m, todayISO().slice(0, 7)),
               debt.get(m.id) ? `nợ ${money(debt.get(m.id)!)}` : 'đủ',
               adv.total ? `ứng còn ${money(adv.remaining)}/${money(adv.total)}` : '',
               s ? `${s.played} trận ${s.won}T-${s.drawn}H-${s.lost}B` : '',
@@ -329,7 +345,7 @@ export const tools: Record<string, ToolDef> = {
       const obs = buildObligations(data)
       const list = sortMatches(data).slice(0, a.so_tran ?? 10)
       if (!list.length) return { text: 'Chưa có trận nào.' }
-      return { text: list.map((m) => matchLine(data, m, obs)).join('\n') }
+      return { text: list.map((m) => matchLine(m, obs)).join('\n') }
     },
   },
 
@@ -503,7 +519,7 @@ export const tools: Record<string, ToolDef> = {
       const { ops, notes } = saveMatchOps(next, data, false)
       const after = applyOps(data, ops) // tính câu báo SAU khi đã trừ tiền ứng / gỡ khoản lệch
       const losers = waterCharges(next)
-      const head = `Đã chốt trận ${fmtDate(m.date)}: ${matchLine(after, next, buildObligations(after)).split(' — ')[1]}`
+      const head = `Đã chốt trận ${fmtDate(m.date)}: ${matchLine(next, buildObligations(after)).split(' — ')[1]}`
       return {
         text: [head, losers.length ? `Phải nộp phạt: ${losers.map((c) => `${nameOf(data, c.memberId)} ${money(c.amount)}`).join(', ')}` : 'Không ai bị phạt.', ...notes].join('\n'),
         ops,
@@ -622,7 +638,7 @@ export const tools: Record<string, ToolDef> = {
   xoa_thanh_vien: {
     title: 'Cho nghỉ / xoá thành viên',
     description:
-      'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn: xoá sạch dữ liệu người đó (gỡ khỏi tháng quỹ, đội hình trận cũ, xoá mọi khoản đã đóng → số dư quỹ giảm). Người còn nợ thì phải có xac_nhan_bo_no = true.',
+      'Mặc định chỉ cho TẠM NGHỈ (giữ lịch sử). xoa_han = true để xoá hẳn: gỡ người đó khỏi danh sách, tháng quỹ, đội hình trận cũ (tiền đã đóng vẫn giữ trong quỹ). Người còn nợ thì phải có xac_nhan_bo_no = true.',
     write: true,
     run: (a: { ten: string; xoa_han?: boolean; xac_nhan_bo_no?: boolean }, data) => {
       const m = findMember(data, a.ten)
@@ -635,11 +651,10 @@ export const tools: Record<string, ToolDef> = {
       if (!a.xoa_han) return { text: `Đã cho ${m.name} tạm nghỉ (không hiện khi chia đội, không tính quỹ tháng mới).`, ops: [setOp('members', m.id, { ...m, active: false })] }
       const plan = purgeMemberPlan(data, m.id)
       return {
-        text: `Đã xoá hẳn ${m.name} cùng toàn bộ dữ liệu${plan.paidTotal ? ` (bỏ ${money(plan.paidTotal)} đã đóng khỏi quỹ)` : ''}.`,
+        text: `Đã xoá hẳn ${m.name}${plan.paidTotal ? ` (giữ ${money(plan.paidTotal)} đã đóng trong quỹ)` : ''}.`,
         ops: [
           ...plan.months.map((mo) => setOp('months', mo.id, mo)),
           ...plan.matches.map((x) => setOp('matches', x.id, x)),
-          ...plan.payments.map((p) => delOp('payments', p.id)),
           delOp('members', m.id),
         ],
       }

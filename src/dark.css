@@ -426,7 +426,6 @@ html.dark body .keep-colors {
   :where(html.dark) .bg-slate-700 { background-color: var(--k-slate-700); }
   :where(html.dark) .bg-slate-900\/60 { background-color: color-mix(in oklab, var(--k-slate-900) 60%, transparent); }
   :where(html.dark) .bg-slate-900\/95 { background-color: color-mix(in oklab, var(--k-slate-900) 95%, transparent); }
-  :where(html.dark) .bg-slate-950 { background-color: var(--k-slate-950); }
   :where(html.dark) .hover\:bg-amber-700:hover:not(:disabled) { background-color: var(--k-amber-700); }
   :where(html.dark) .hover\:bg-amber-900:hover:not(:disabled) { background-color: var(--k-amber-900); }
   :where(html.dark) .hover\:bg-green-700:hover:not(:disabled) { background-color: var(--k-green-700); }

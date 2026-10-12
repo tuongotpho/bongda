@@ -1,3 +1,7 @@
+/** Các bảng dữ liệu — web (store.ts) và MCP dùng chung */
+export type Coll = 'members' | 'matches' | 'months' | 'payments' | 'expenses' | 'incomes'
+export const COLLS: Coll[] = ['members', 'matches', 'months', 'payments', 'expenses', 'incomes']
+
 export type DrawRule = 'none' | 'half' | 'full'
 
 /** main = Quỹ bóng đá (đóng tháng → trả sân) · extra = Quỹ ủng hộ & phạt (→ bóng, áo, hoa quả, nước) */
