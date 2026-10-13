@@ -31,7 +31,7 @@ export async function saveMatch(next: Match, data: AppData, deductAdvance = fals
     const ok = await confirmDialog({
       title: `Gỡ ${plan.staleCash.length} khoản đã thu (${money(total)})?`,
       message:
-        'Thay đổi này làm các khoản tiền phạt đã thu không còn khớp (người đó không còn phải nộp, hoặc mức phạt đổi khi chuyển thắng ↔ hoà).',
+        'Thay đổi này làm các khoản tiền nước đã thu không còn khớp (người đó không còn phải nộp, hoặc mức tiền nước đổi khi chuyển thắng ↔ hoà).',
       details: ['Các khoản này sẽ được gỡ khỏi sổ quỹ', 'Nếu người đó vẫn phải nộp thì gạch lại "Đã đóng" sau'],
       confirmText: 'Gỡ và lưu',
       tone: 'warning',

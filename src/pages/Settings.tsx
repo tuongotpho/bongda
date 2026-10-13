@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { money, todayISO } from '../logic'
 import { store } from '../store'
+import { BANKS, bankText } from '../bank'
 import type { AppData, DrawRule } from '../types'
 import { confirmDialog } from '../dialog'
 import { Btn, Field, Modal, inputCls, useApp } from '../ui'
@@ -62,7 +63,7 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
           <input value={s.teamName} onChange={(e) => setS({ ...s, teamName: e.target.value })} className={inputCls} />
         </Field>
         <div className="grid grid-cols-2 gap-2">
-          <Field label="Tiền phạt / người đội thua" hint={money(s.waterFee)}>
+          <Field label="Tiền nước / người đội thua" hint={money(s.waterFee)}>
             <input inputMode="numeric" value={s.waterFee} onChange={(e) => setS({ ...s, waterFee: num(e.target.value) })} className={inputCls} />
           </Field>
           <Field label="Mức quỹ tháng mặc định (người mới)" hint={money(s.monthlyFee)}>
@@ -76,9 +77,29 @@ export default function SettingsModal({ onClose }: { onClose: () => void }) {
             <option value="none">Không ai phải đóng</option>
           </select>
         </Field>
-        <Field label="Thông tin chuyển khoản (hiện trong tin nhắc)">
-          <input value={s.bankInfo} onChange={(e) => setS({ ...s, bankInfo: e.target.value })} className={inputCls} placeholder="VD: Vietcombank 0123456789 – Nguyễn Văn A" />
-        </Field>
+        <div className="space-y-3 rounded-2xl bg-slate-50 p-3">
+          <div className="text-sm font-semibold text-slate-700">Tài khoản nhận tiền (tạo mã QR cho anh em quét)</div>
+          <div className="grid grid-cols-2 gap-2">
+            <Field label="Ngân hàng">
+              <select value={s.bankBin} onChange={(e) => setS({ ...s, bankBin: e.target.value })} className={inputCls}>
+                {BANKS.map((b) => (
+                  <option key={b.bin} value={b.bin}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Số tài khoản">
+              <input value={s.bankAccount} onChange={(e) => setS({ ...s, bankAccount: e.target.value.replace(/\s/g, '') })} className={inputCls} />
+            </Field>
+          </div>
+          <Field label="Tên chủ tài khoản">
+            <input value={s.bankHolder} onChange={(e) => setS({ ...s, bankHolder: e.target.value.toUpperCase() })} className={inputCls} placeholder="VD: NGUYEN VAN A" />
+          </Field>
+          <Field label="Dòng chữ trong tin nhắc (tuỳ chọn)" hint={s.bankInfo.trim() ? undefined : `Để trống: ${bankText({ ...s, bankInfo: '' }) || '—'}`}>
+            <input value={s.bankInfo} onChange={(e) => setS({ ...s, bankInfo: e.target.value })} className={inputCls} placeholder="Để trống để tự ghi theo tài khoản trên" />
+          </Field>
+        </div>
         <p className="text-xs text-slate-500">Mức tiền mới chỉ áp dụng cho trận / tháng tạo sau khi lưu, không làm thay đổi sổ cũ.</p>
         <Btn className="w-full" onClick={save}>
           Lưu cài đặt

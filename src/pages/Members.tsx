@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react'
 import { setPaid } from '../actions'
-import { feeFor, fmtDate, fmtMonth, getMemberAdvanceInfo, nextFeeChange, planFeeChange, purgeMemberPlan, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
+import { feeFor, fmtDate, isDue, fmtMonth, getMemberAdvanceInfo, nextFeeChange, planFeeChange, purgeMemberPlan, isAdvancePayment, matchOutcome, money, newId, todayISO } from '../logic'
 import { confirmDialog } from '../dialog'
 import { login, store } from '../store'
 import type { Member } from '../types'
 import { Icon } from '../icons'
 import { Avatar, Btn, Card, Empty, Field, Modal, PaidBadge, inputCls, useApp } from '../ui'
 import { PayToggle } from './Matches'
+import { PayQRModal } from '../PayQR'
 
 /** Nợ từ mức này trở lên mới tô đỏ; nợ nhỏ (vài trận tiền nước) để màu vàng cho đỡ báo động */
 const BIG_DEBT = 100000
@@ -47,7 +48,7 @@ export default function Members() {
 
   const debt = useMemo(() => {
     const d = new Map<string, number>()
-    for (const o of obligations) if (!o.paid) d.set(o.memberId, (d.get(o.memberId) ?? 0) + o.amount)
+    for (const o of obligations) if (isDue(o)) d.set(o.memberId, (d.get(o.memberId) ?? 0) + o.amount)
     return d
   }, [obligations])
 
@@ -156,7 +157,7 @@ export default function Members() {
             <div className="-mx-1 flex gap-1 overflow-x-auto px-1 text-xs [scrollbar-width:none]">
               {[
                 { id: 'active', label: `Đang đá (${activeMembers.length})` },
-                { id: 'debt', label: `Còn nợ (${activeMembers.filter((m) => debt.get(m.id)).length})` },
+                { id: 'debt', label: `Chưa đóng (${activeMembers.filter((m) => debt.get(m.id)).length})` },
                 { id: 'inactive', label: `Tạm nghỉ (${inactiveMembers.length})` },
                 { id: 'all', label: `Tất cả (${data.members.length})` },
               ].map((tab) => (
@@ -375,7 +376,8 @@ export function MemberModal({
   const [tab, setTab] = useState<'monthly' | 'water'>('monthly')
 
   const obs = member ? obligations.filter((o) => o.memberId === member.id).reverse() : []
-  const owe = obs.filter((o) => !o.paid).reduce((s, o) => s + o.amount, 0)
+  const owe = obs.filter(isDue).reduce((s, o) => s + o.amount, 0)
+  const [showQr, setShowQr] = useState(false)
   const advInfo = member ? getMemberAdvanceInfo(member, data.payments) : null
 
   const matchesCount = member
@@ -650,7 +652,7 @@ export function MemberModal({
       </Field>
 
       <p className="text-[11px] text-sky-900/80 leading-relaxed">
-        Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền phạt</b> vào số tiền ứng này và gạch nợ ngay lập tức.
+        Khi thành viên này thua trận, hệ thống sẽ <b>tự động trừ tiền nước</b> vào số tiền ứng này và đánh dấu đã đóng ngay lập tức.
       </p>
     </div>
   )
@@ -672,7 +674,7 @@ export function MemberModal({
   const monthly = obs.filter((o) => o.kind === 'monthly')
   const water = obs.filter((o) => o.kind === 'water')
   const list = tab === 'monthly' ? monthly : water
-  const unpaidOf = (xs: typeof obs) => xs.filter((o) => !o.paid)
+  const unpaidOf = (xs: typeof obs) => xs.filter(isDue)
   const listOwe = unpaidOf(list).reduce((s, o) => s + o.amount, 0)
 
   return (
@@ -694,9 +696,16 @@ export function MemberModal({
       }
       headerRight={
         owe > 0 ? (
-          <span className="shrink-0 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600">Còn nợ {money(owe)}</span>
+          <button
+            type="button"
+            onClick={() => setShowQr(true)}
+            className="inline-flex shrink-0 cursor-pointer items-center gap-1 rounded-full bg-red-50 px-2.5 py-1 text-xs font-bold text-red-600 hover:bg-red-100"
+            title="Mở mã QR có sẵn số tiền để chuyển khoản"
+          >
+            Chưa đóng {money(owe)} · <Icon name="wallet" className="h-3.5 w-3.5" /> QR
+          </button>
         ) : (
-          <span className="hidden shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 sm:inline">Không nợ</span>
+          <span className="hidden shrink-0 rounded-full bg-green-50 px-2.5 py-1 text-xs font-semibold text-green-700 sm:inline">Đã đóng đủ</span>
         )
       }
       footer={
@@ -731,7 +740,7 @@ export function MemberModal({
           <div className="mb-3 flex gap-1 rounded-xl bg-slate-100 p-1">
             {([
               ['monthly', 'Quỹ tháng', monthly],
-              ['water', 'Tiền phạt', water],
+              ['water', 'Tiền nước', water],
             ] as const).map(([k, label, xs]) => {
               const n = unpaidOf(xs).length
               return (
@@ -752,18 +761,18 @@ export function MemberModal({
           <div className="mb-1 flex items-center justify-between text-xs text-slate-500">
             <span>
               {tab === 'monthly'
-                ? `Đã đóng ${list.length - unpaidOf(list).length}/${list.length} tháng`
+                ? `Đã đóng ${list.filter((o) => o.paid).length}/${list.length} tháng`
                 : `Thua ${list.length} trận`}
             </span>
             {listOwe > 0 ? (
-              <span className="font-bold text-red-600">Nợ {money(listOwe)}</span>
+              <span className="font-bold text-red-600">Chưa đóng {money(listOwe)}</span>
             ) : (
               list.length > 0 && <span className="font-medium text-green-700">Đã đóng đủ</span>
             )}
           </div>
 
           {!list.length ? (
-            <Empty>{tab === 'monthly' ? 'Chưa có tháng quỹ nào.' : 'Chưa phải đóng tiền phạt trận nào.'}</Empty>
+            <Empty>{tab === 'monthly' ? 'Chưa có tháng quỹ nào.' : 'Chưa phải đóng tiền nước trận nào.'}</Empty>
           ) : (
             <ul className="divide-y divide-slate-100 text-sm md:max-h-[calc(92vh-13rem)] md:overflow-y-auto">
               {list.map((o) => {
@@ -774,6 +783,11 @@ export function MemberModal({
                     <div>
                       <div className="flex items-center gap-1.5 font-medium text-slate-700">
                         <span>{o.label}</span>
+                        {o.upcoming && (
+                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${o.paid ? 'bg-sky-100 text-sky-800' : 'bg-amber-50 text-amber-700'}`}>
+                            {o.paid ? 'Đóng trước' : 'Chưa tới tháng'}
+                          </span>
+                        )}
                         {isAdv && (
                           <span className="rounded bg-sky-100 px-1.5 py-0.5 text-[10px] font-semibold text-sky-800">
                             Trừ tiền ứng
@@ -790,6 +804,14 @@ export function MemberModal({
           )}
         </div>
       </div>
+      {showQr && (
+        <PayQRModal
+          amount={owe}
+          note={`${member.name} dong quy`}
+          subtitle={`${member.name} — đóng ${money(owe)}`}
+          onClose={() => setShowQr(false)}
+        />
+      )}
     </Modal>
   )
 }
@@ -923,7 +945,7 @@ function ConfirmDeleteModal({
   const { data, obligations } = useApp()
   const [loading, setLoading] = useState(false)
   // Xoá người còn nợ thì khoản nợ biến khỏi danh sách nhắc — phải báo rõ
-  const owe = obligations.filter((o) => o.memberId === member.id && !o.paid).reduce((s, o) => s + o.amount, 0)
+  const owe = obligations.filter((o) => o.memberId === member.id && isDue(o)).reduce((s, o) => s + o.amount, 0)
 
   const matchesCount = data.matches.filter(
     (match) => (match.teamA || []).includes(member.id) || (match.teamB || []).includes(member.id),
@@ -952,7 +974,7 @@ function ConfirmDeleteModal({
 
         {owe > 0 && (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-xs text-red-800">
-            <b>{member.name} còn nợ {money(owe)}.</b> Xoá hẳn thì khoản nợ này sẽ không còn hiện trong danh sách nhắc nữa.
+            <b>{member.name} còn {money(owe)} chưa đóng.</b> Xoá hẳn thì khoản này sẽ không còn hiện trong danh sách nhắc nữa.
           </div>
         )}
 

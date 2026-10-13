@@ -140,7 +140,7 @@ export default function Split({ go, editMatchId }: { go: (tab: string, id?: stri
       `⚽ ${data.settings.teamName} — ĐỘI HÌNH ${fmtDate(matchDate)}`,
       `🟦 Đội A (${t.teamA.length}): ${t.teamA.map((id) => name(ctx, id)).join(', ')}`,
       `🟧 Đội B (${t.teamB.length}): ${t.teamB.map((id) => name(ctx, id)).join(', ')}`,
-      `Đội thua mỗi người ${money(data.settings.waterFee)} tiền phạt 💧`,
+      `Đội thua mỗi người ${money(data.settings.waterFee)} tiền nước 💧`,
     ].join('\n')
 
   const copyLineup = async (t: { teamA: string[]; teamB: string[] }, matchDate = date) => {

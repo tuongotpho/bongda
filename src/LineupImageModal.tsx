@@ -29,7 +29,7 @@ export default function LineupImageModal({ params, onClose }: { params: LineupIm
           <div className="mb-3 flex items-center justify-center gap-1.5 rounded-xl bg-slate-100 p-1 text-xs">
             {tab(
               showPayment,
-              `Kèm cột đã đóng tiền (${params.outcome === 'A' ? 'Đội B thua' : params.outcome === 'B' ? 'Đội A thua' : 'Đội nộp phạt'})`,
+              `Kèm cột đã đóng tiền (${params.outcome === 'A' ? 'Đội B thua' : params.outcome === 'B' ? 'Đội A thua' : 'Đội đóng tiền nước'})`,
               true,
             )}
             {tab(!showPayment, 'Chỉ đội hình', false)}

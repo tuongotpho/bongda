@@ -156,6 +156,24 @@ describe('nghĩa vụ và người nợ', () => {
     ])
   })
 
+  it('tháng quỹ chưa tới không tính chưa đóng; đã đóng thì là đóng trước', () => {
+    const d2 = data({
+      months: [
+        { id: '2026-10', amounts: { a: 100000 }, createdAt: 0 },
+        { id: '2026-11', amounts: { a: 100000, b: 100000 }, createdAt: 0 },
+      ],
+      payments: [{ id: 'monthly_2026-11_a', memberId: 'a', kind: 'monthly', refId: '2026-11', amount: 100000, paidAt: 0 }],
+    })
+    const obs = buildObligations(d2, '2026-10-13')
+    expect(obs.find((o) => o.id === 'monthly_2026-11_a')).toMatchObject({ paid: true, upcoming: true })
+    expect(debtors(d2, obs).map((x) => [x.member.id, x.total])).toEqual([['a', 100000]])
+    // Sang tháng 11 thì B mới phải đóng
+    expect(debtors(d2, buildObligations(d2, '2026-11-01')).map((x) => [x.member.id, x.total])).toEqual([
+      ['a', 100000],
+      ['b', 100000],
+    ])
+  })
+
   it('tin nhắc có tên, số tiền, tổng', () => {
     const msg = reminderMessage(d, debtors(d), '2026-10-04')
     expect(msg).toContain('Còn 3 bạn')

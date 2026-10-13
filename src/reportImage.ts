@@ -1,4 +1,5 @@
 import { fmtDate, money, todayISO } from './logic'
+import { drawQr } from './vietqr'
 
 // Ảnh báo cáo vẽ bằng canvas, nền sáng để gửi Zalo / in.
 // Vẽ gấp 3 lần kích thước logic cho nét khi phóng to; giảm dần nếu ảnh quá lớn,
@@ -30,6 +31,7 @@ const C = {
   amberLine: '#fde68a',
   head: '#f1f5f9',
   zebra: '#f8fafc',
+  sky: '#0ea5e9',
 }
 
 // ---------- Hàm vẽ dùng chung ----------
@@ -208,17 +210,21 @@ function drawTable(
   return y + th
 }
 
-function bankLinesOf(W: number, bankInfo?: string) {
+const QR_PX = 220
+
+function bankLinesOf(W: number, bankInfo?: string, qr?: string) {
   if (!bankInfo?.trim()) return []
   const m = document.createElement('canvas').getContext('2d')!
   font(m, 400, 20)
-  return wrap(m, bankInfo.trim(), W - PAD * 2 - 48, 4)
+  return wrap(m, bankInfo.trim(), W - PAD * 2 - 48 - (qr ? QR_PX + 32 : 0), 4)
 }
-const bankHeight = (lines: string[]) => (lines.length ? 64 + lines.length * 30 : 0)
+const bankHeight = (lines: string[], qr?: string) =>
+  lines.length ? Math.max(64 + lines.length * 30 + (qr ? 40 : 0), qr ? QR_PX + 40 : 0) : 0
 
-function drawBank(ctx: CanvasRenderingContext2D, W: number, y: number, lines: string[]) {
+function drawBank(ctx: CanvasRenderingContext2D, W: number, y: number, lines: string[], qr?: string) {
+  const h = bankHeight(lines, qr)
   ctx.fillStyle = C.card
-  roundRect(ctx, PAD, y, W - PAD * 2, bankHeight(lines), 18)
+  roundRect(ctx, PAD, y, W - PAD * 2, h, 18)
   ctx.fill()
   ctx.strokeStyle = C.line
   ctx.lineWidth = 1.5
@@ -230,6 +236,12 @@ function drawBank(ctx: CanvasRenderingContext2D, W: number, y: number, lines: st
   font(ctx, 400, 20)
   ctx.fillStyle = C.text
   lines.forEach((l, i) => ctx.fillText(l, PAD + 24, y + 70 + i * 30))
+  if (qr) {
+    font(ctx, 400, 17)
+    ctx.fillStyle = C.sub
+    ctx.fillText('📱 Mở app ngân hàng → Quét mã QR bên cạnh', PAD + 24, y + 70 + lines.length * 30 + 12)
+    drawQr(ctx, qr, W - PAD - 20 - QR_PX, y + 20, QR_PX)
+  }
 }
 
 const FOOTER_H = 70
@@ -242,8 +254,8 @@ function drawFooter(ctx: CanvasRenderingContext2D, W: number, H: number, teamNam
 
 // ---------- Bảng tổng hợp quỹ tháng (thành viên × 12 tháng) ----------
 
-/** paid đã đóng · unpaid chưa đóng · future mở sớm chưa tới tháng · exempt miễn · closed chưa mở quỹ */
-export type MatrixCell = 'paid' | 'unpaid' | 'future' | 'exempt' | 'closed'
+/** paid đã đóng · prepaid đóng trước (tháng chưa tới) · unpaid chưa đóng · future mở sớm chưa tới tháng · exempt miễn · closed chưa mở quỹ */
+export type MatrixCell = 'paid' | 'prepaid' | 'unpaid' | 'future' | 'exempt' | 'closed'
 
 export interface PaidMatrixParams {
   teamName: string
@@ -257,6 +269,8 @@ export interface PaidMatrixParams {
   /** đang lọc "chỉ người còn nợ" */
   onlyOwe?: boolean
   bankInfo?: string
+  /** Chuỗi VietQR — có thì vẽ mã QR cạnh thông tin chuyển khoản */
+  bankQr?: string
 }
 
 export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement {
@@ -268,10 +282,10 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
 
   const owe = p.rows.reduce((s, r) => s + r.owe, 0)
   const opened = p.months.filter((_, i) => p.rows.some((r) => r.cells[i] !== 'closed')).length
-  const bankLines = bankLinesOf(W, p.bankInfo)
+  const bankLines = bankLinesOf(W, p.bankInfo, p.bankQr)
   const tableH = 60 + HEAD_H + Math.max(p.rows.length, 1) * ROW_H + ROW_H
   const legendH = 56
-  const bankH = bankHeight(bankLines)
+  const bankH = bankHeight(bankLines, p.bankQr)
   const H = HEADER_H + 32 + BOX_H + 40 + tableH + legendH + (bankH ? 16 + bankH : 0) + FOOTER_H
 
   const { canvas, ctx } = makeCanvas(W, H)
@@ -280,8 +294,8 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
   let y = HEADER_H + 32
   drawBoxes(ctx, W, y, [
     ['Đã thu cả năm', money(p.collected), C.green],
-    ['Còn nợ', money(owe), owe ? C.red : C.green],
-    [p.onlyOwe ? 'Người còn nợ' : 'Thành viên', `${p.rows.length} người`, C.text],
+    ['Chưa đóng', money(owe), owe ? C.red : C.green],
+    [p.onlyOwe ? 'Người chưa đóng' : 'Thành viên', `${p.rows.length} người`, C.text],
     ['Tháng đã mở quỹ', `${opened}/12`, C.text],
   ])
   y += BOX_H + 40
@@ -291,7 +305,7 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
     W,
     y,
     {
-      title: p.onlyOwe ? 'Danh sách người còn nợ quỹ' : 'Tình hình đóng quỹ từng tháng',
+      title: p.onlyOwe ? 'Danh sách người chưa đóng quỹ' : 'Tình hình đóng quỹ từng tháng',
       cols: [
         { label: 'STT', x: X.stt, align: 'center' },
         { label: 'Thành viên', x: X.name, align: 'left' },
@@ -301,11 +315,11 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
           align: 'center' as const,
           color: m === p.thisMonth ? C.green : p.rows.some((r) => r.cells[i] !== 'closed') ? C.sub : C.faint,
         })),
-        { label: 'Còn nợ', x: X.owe, align: 'right' },
+        { label: 'Chưa đóng', x: X.owe, align: 'right' },
       ],
       count: p.rows.length,
       rowH: ROW_H,
-      empty: p.onlyOwe ? 'Không ai còn nợ quỹ năm này' : 'Chưa có thành viên đóng quỹ',
+      empty: p.onlyOwe ? 'Không ai chưa đóng quỹ năm này' : 'Chưa có thành viên đóng quỹ',
       foot: (cy) => {
         font(ctx, 700, 17)
         ctx.textAlign = 'left'
@@ -314,9 +328,9 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
         font(ctx, 600, 16)
         ctx.textAlign = 'center'
         p.months.forEach((_, i) => {
-          const due = p.rows.filter((r) => ['paid', 'unpaid', 'future'].includes(r.cells[i]))
+          const due = p.rows.filter((r) => ['paid', 'prepaid', 'unpaid', 'future'].includes(r.cells[i]))
           if (!due.length) return
-          const paid = due.filter((r) => r.cells[i] === 'paid').length
+          const paid = due.filter((r) => r.cells[i] === 'paid' || r.cells[i] === 'prepaid').length
           ctx.fillStyle = paid === due.length ? C.green : C.sub
           ctx.fillText(`${paid}/${due.length}`, monthX(i), cy)
         })
@@ -348,7 +362,11 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
         }
         const s = 34
         const [fill, stroke, fg, mark] =
-          c === 'paid' ? [C.greenFill, C.greenFill, '#ffffff', '✓'] : c === 'future' ? [C.amberBg, C.amberLine, C.amber, '·'] : [C.redBg, C.redLine, C.red, '✕']
+          c === 'paid'
+            ? [C.greenFill, C.greenFill, '#ffffff', '✓']
+            : c === 'prepaid'
+              ? [C.sky, C.sky, '#ffffff', '✓']
+              : c === 'future' ? [C.amberBg, C.amberLine, C.amber, '·'] : [C.redBg, C.redLine, C.red, '✕']
         roundRect(ctx, cx - s / 2, cy - s / 2, s, s, 9)
         ctx.fillStyle = fill
         ctx.fill()
@@ -371,8 +389,9 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
   y += 16
   const legend: [string, string, string, string][] = [
     ['✓', C.greenFill, '#ffffff', 'Đã đóng'],
+    ['✓', C.sky, '#ffffff', 'Đóng trước'],
     ['✕', C.redBg, C.red, 'Chưa đóng'],
-    ['·', C.amberBg, C.amber, 'Mở sớm, chưa tới tháng (không tính nợ)'],
+    ['·', C.amberBg, C.amber, 'Mở sớm, chưa tới tháng (chưa phải đóng)'],
     ['–', C.bg, C.faint, 'Miễn / không phải đóng'],
   ]
   let lx = PAD
@@ -392,7 +411,7 @@ export function generatePaidMatrixImage(p: PaidMatrixParams): HTMLCanvasElement 
   }
   y += legendH
 
-  if (bankLines.length) drawBank(ctx, W, y + 16, bankLines)
+  if (bankLines.length) drawBank(ctx, W, y + 16, bankLines, p.bankQr)
   drawFooter(ctx, W, H, p.teamName)
   return canvas
 }

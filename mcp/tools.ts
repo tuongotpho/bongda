@@ -31,6 +31,7 @@ import {
   todayISO,
   waterCharges,
 } from '../src/logic'
+import { bankText } from '../src/bank'
 import { FUND_NAMES, type AppData, type Coll, type DrawRule, type FundId, type Match, type Member, type Obligation, type Payment, type Settings } from '../src/types'
 
 export type Op = { kind: 'set'; coll: Coll; id: string; data: object } | { kind: 'delete'; coll: Coll; id: string } | { kind: 'settings'; data: Settings }
@@ -137,7 +138,7 @@ function matchLine(m: Match, obs: Obligation[]) {
   const score = m.scoreA != null ? `${m.scoreA}–${m.scoreB}` : ''
   const penDone = isPenaltyDecided(m)
   // Hoà rồi thắng luân lưu → ghi "Hoà · Đội B thắng luân lưu", không ghi "Đội B thắng" hai lần
-  const res = m.charges ? `sổ cũ, ${m.charges.length} người bị phạt` : [score, penDone ? 'Hoà' : outcomeLabel(m)].filter(Boolean).join(' · ')
+  const res = m.charges ? `sổ cũ, ${m.charges.length} người đóng tiền nước` : [score, penDone ? 'Hoà' : outcomeLabel(m)].filter(Boolean).join(' · ')
   const pen = penDone ? ` · Đội ${getPenaltyWinner(m)} thắng luân lưu` : ''
   const money_ = mine.length ? ` · ${unpaid.length ? `còn ${unpaid.length}/${mine.length} chưa nộp (${money(unpaid.reduce((s, o) => s + o.amount, 0))})` : `đã thu đủ ${mine.length} người`}` : ''
   return `${fmtDate(m.date)} [${m.id}] — ${res}${pen}${money_}`
@@ -150,9 +151,9 @@ function matchDetail(data: AppData, m: Match) {
     lines.push(`Đội A (${m.teamA.length}): ${names(data, m.teamA)}`)
     lines.push(`Đội B (${m.teamB.length}): ${names(data, m.teamB)}`)
   }
-  lines.push(`Mức phạt: ${money(m.waterFee)}/người đội thua · luật hoà: ${DRAW[m.drawRule]}`)
+  lines.push(`Tiền nước: ${money(m.waterFee)}/người đội thua · luật hoà: ${DRAW[m.drawRule]}`)
   if (obs.length) {
-    lines.push('Tiền phạt:')
+    lines.push('Tiền nước:')
     for (const o of obs) {
       const p = data.payments.find((x) => x.id === o.id)
       lines.push(`  - ${nameOf(data, o.memberId)}: ${money(o.amount)} — ${o.paid ? (p?.note ? `đã trừ (${p.note})` : 'đã đóng tiền mặt') : 'CHƯA ĐÓNG'}`)
@@ -162,10 +163,10 @@ function matchDetail(data: AppData, m: Match) {
   return lines.join('\n')
 }
 
-const DRAW: Record<DrawRule, string> = { none: 'hoà không phạt', half: 'hoà phạt nửa', full: 'hoà phạt đủ' }
+const DRAW: Record<DrawRule, string> = { none: 'hoà không đóng', half: 'hoà đóng nửa', full: 'hoà đóng đủ' }
 
 const settingsText = (s: Settings) =>
-  `Tên đội: ${s.teamName}\nPhạt thua: ${money(s.waterFee)}/người · ${DRAW[s.drawRule]}\nQuỹ tháng mặc định: ${money(s.monthlyFee)}\nChuyển khoản: ${s.bankInfo || '(chưa ghi)'}`
+  `Tên đội: ${s.teamName}\nTiền nước đội thua: ${money(s.waterFee)}/người · ${DRAW[s.drawRule]}\nQuỹ tháng mặc định: ${money(s.monthlyFee)}\nChuyển khoản: ${bankText(s) || '(chưa ghi)'}`
 
 function memberStats(data: AppData) {
   const s = new Map<string, { played: number; won: number; drawn: number; lost: number }>()
@@ -202,7 +203,7 @@ function saveMatchOps(next: Match, data: AppData, confirmCash: boolean | undefin
   if (plan.staleCash.length && !confirmCash) {
     const list = plan.staleCash.map((p) => `${nameOf(data, p.memberId)} ${money(p.amount)}`).join(', ')
     throw new ToolError(
-      `CHƯA LƯU. Thay đổi này làm ${plan.staleCash.length} khoản tiền phạt ĐÃ THU TIỀN MẶT không còn khớp: ${list}. ` +
+      `CHƯA LƯU. Thay đổi này làm ${plan.staleCash.length} khoản tiền nước ĐÃ THU TIỀN MẶT không còn khớp: ${list}. ` +
         `Các khoản đó sẽ bị gỡ khỏi sổ quỹ. Hỏi người dùng; nếu đồng ý thì gọi lại với xac_nhan_go_khoan_da_thu = true.`,
     )
   }
@@ -275,7 +276,7 @@ export const tools: Record<string, ToolDef> = {
         const adv = getMemberAdvanceInfo(m, data.payments)
         if (!un.length) return { text: `${m.name} đã đóng đủ.${adv.remaining ? ` Tiền ứng còn ${money(adv.remaining)}.` : ''}` }
         return {
-          text: [`${m.name} còn nợ ${money(un.reduce((s, o) => s + o.amount, 0))}:`, ...un.map((o) => `  - ${o.label}: ${money(o.amount)}`), adv.remaining ? `Tiền ứng còn ${money(adv.remaining)} (trừ được tiền phạt).` : '']
+          text: [`${m.name} chưa đóng ${money(un.reduce((s, o) => s + o.amount, 0))}:`, ...un.map((o) => `  - ${o.label}: ${money(o.amount)}`), adv.remaining ? `Tiền ứng còn ${money(adv.remaining)} (trừ được tiền phạt).` : '']
             .filter(Boolean)
             .join('\n'),
         }
@@ -284,7 +285,7 @@ export const tools: Record<string, ToolDef> = {
       if (!list.length) return { text: 'Tất cả đã đóng đủ.' }
       return {
         text: [
-          `${list.length} người còn nợ, tổng ${money(list.reduce((s, d) => s + d.total, 0))}:`,
+          `${list.length} người chưa đóng, tổng ${money(list.reduce((s, d) => s + d.total, 0))}:`,
           ...list.map((d) => `  - ${d.member.name}: ${money(d.total)} (${d.unpaid.map((o) => `${o.label} ${money(o.amount)}`).join('; ')})`),
         ].join('\n'),
       }
@@ -325,7 +326,7 @@ export const tools: Record<string, ToolDef> = {
               `${m.name}${m.isGK ? ' (thủ môn)' : ''}${m.active ? '' : ' [tạm nghỉ]'}`,
               `${m.skill}★`,
               feeLine(m, todayISO().slice(0, 7)),
-              debt.get(m.id) ? `nợ ${money(debt.get(m.id)!)}` : 'đủ',
+              debt.get(m.id) ? `chưa đóng ${money(debt.get(m.id)!)}` : 'đủ',
               adv.total ? `ứng còn ${money(adv.remaining)}/${money(adv.total)}` : '',
               s ? `${s.played} trận ${s.won}T-${s.drawn}H-${s.lost}B` : '',
             ]
@@ -521,7 +522,7 @@ export const tools: Record<string, ToolDef> = {
       const losers = waterCharges(next)
       const head = `Đã chốt trận ${fmtDate(m.date)}: ${matchLine(next, buildObligations(after)).split(' — ')[1]}`
       return {
-        text: [head, losers.length ? `Phải nộp phạt: ${losers.map((c) => `${nameOf(data, c.memberId)} ${money(c.amount)}`).join(', ')}` : 'Không ai bị phạt.', ...notes].join('\n'),
+        text: [head, losers.length ? `Phải đóng tiền nước: ${losers.map((c) => `${nameOf(data, c.memberId)} ${money(c.amount)}`).join(', ')}` : 'Không ai phải đóng.', ...notes].join('\n'),
         ops,
       }
     },
@@ -536,7 +537,7 @@ export const tools: Record<string, ToolDef> = {
       const picked = pickObligations(unpaidOf(data, m), a.khoan, a.tat_ca, m.name, 'gạch')
       const useAdv = a.hinh_thuc === 'tru_ung'
       if (useAdv) {
-        if (picked.some((o) => o.kind !== 'water')) throw new ToolError('Tiền ứng chỉ trừ được tiền phạt trận, không trừ quỹ tháng.')
+        if (picked.some((o) => o.kind !== 'water')) throw new ToolError('Tiền ứng chỉ trừ được tiền nước trận, không trừ quỹ tháng.')
         const left = getMemberAdvanceInfo(m, data.payments).remaining
         const need = picked.reduce((s, o) => s + o.amount, 0)
         if (left < need) throw new ToolError(`${m.name} chỉ còn ${money(left)} tiền ứng, không đủ trừ ${money(need)}.`)
@@ -645,7 +646,7 @@ export const tools: Record<string, ToolDef> = {
       const owe = unpaidOf(data, m)
       if (a.xoa_han && owe.length && !a.xac_nhan_bo_no)
         throw new ToolError(
-          `CHƯA XOÁ. ${m.name} còn nợ ${money(owe.reduce((s, o) => s + o.amount, 0))} (${owe.map((o) => o.label).join('; ')}). ` +
+          `CHƯA XOÁ. ${m.name} còn chưa đóng ${money(owe.reduce((s, o) => s + o.amount, 0))} (${owe.map((o) => o.label).join('; ')}). ` +
             'Xoá hẳn thì khoản nợ này biến khỏi danh sách nhắc. Gợi ý cho tạm nghỉ thay vì xoá; nếu người dùng vẫn muốn xoá thì gọi lại với xac_nhan_bo_no = true.',
         )
       if (!a.xoa_han) return { text: `Đã cho ${m.name} tạm nghỉ (không hiện khi chia đội, không tính quỹ tháng mới).`, ops: [setOp('members', m.id, { ...m, active: false })] }
@@ -706,13 +707,13 @@ export const tools: Record<string, ToolDef> = {
 
   xoa_tran: {
     title: 'Xoá trận',
-    description: 'Xoá hẳn một trận và mọi khoản phạt đã thu của trận đó. Chỉ dùng khi người dùng nói rõ muốn xoá.',
+    description: 'Xoá hẳn một trận và mọi khoản tiền nước đã thu của trận đó. Chỉ dùng khi người dùng nói rõ muốn xoá.',
     write: true,
     run: (a: { tran: string }, data) => {
       const m = findMatch(data, a.tran)
       const pays = data.payments.filter((p) => p.kind === 'water' && p.refId === m.id)
       return {
-        text: `Đã xoá trận ${fmtDate(m.date)}${pays.length ? ` và ${pays.length} khoản phạt đã thu (${money(pays.reduce((s, p) => s + p.amount, 0))})` : ''}.`,
+        text: `Đã xoá trận ${fmtDate(m.date)}${pays.length ? ` và ${pays.length} khoản tiền nước đã thu (${money(pays.reduce((s, p) => s + p.amount, 0))})` : ''}.`,
         ops: [delOp('matches', m.id), ...pays.map((p) => delOp('payments', p.id))],
       }
     },

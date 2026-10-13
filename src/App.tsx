@@ -5,6 +5,7 @@ import Matches from './pages/Matches'
 import Members, { MemberModal } from './pages/Members'
 import Overview from './pages/Overview'
 import SettingsModal from './pages/Settings'
+import { PayQRModal } from './PayQR'
 import Split from './pages/Split'
 import { isDemo, login, logout, store, watchAuth, type AuthState } from './store'
 import { DEFAULT_SETTINGS, type AppData } from './types'
@@ -41,6 +42,8 @@ export default function App() {
   const [auth, setAuth] = useState<AuthState>({ user: null, isAdmin: false })
   const [tab, setTab] = useState(initialTab)
   const [viewMember, setViewMember] = useState<string | null>(null)
+  // Mở link có #qr → hiện ngay mã QR chuyển khoản (gửi link này cho anh em)
+  const [showQr, setShowQr] = useState(() => location.hash === '#qr')
   const [editMatchId, setEditMatchId] = useState<string | null>(null)
   const [showSettings, setShowSettings] = useState(false)
   const [authError, setAuthError] = useState<{ code: string; message: string; domain?: string } | null>(null)
@@ -198,6 +201,14 @@ export default function App() {
               )
             })}
           </nav>
+          <div className="px-3 pb-3">
+            <button
+              onClick={() => setShowQr(true)}
+              className="flex w-full cursor-pointer items-center gap-3 rounded-xl bg-white px-3 py-2.5 text-left text-sm font-semibold text-green-900 shadow-lg shadow-black/20 transition hover:bg-green-50"
+            >
+              <Icon name="qr" className="h-5 w-5" /> Mã QR đóng quỹ
+            </button>
+          </div>
           <div className="space-y-2 border-t border-white/10 p-4">
             <button
               onClick={() => setDark((d) => !d)}
@@ -228,6 +239,9 @@ export default function App() {
               </div>
             </div>
             <div className="flex shrink-0 items-center gap-1 [&>button]:px-2.5 [&>button]:text-xs">
+              <button onClick={() => setShowQr(true)} className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl hover:bg-white/10" aria-label="Mã QR đóng quỹ" title="Mã QR đóng quỹ">
+                <Icon name="qr" className="h-5 w-5" />
+              </button>
               {themeBtn('grid h-9 w-9 cursor-pointer place-items-center rounded-xl !px-0 hover:bg-white/10')}
               {auth.isAdmin && (
                 <button onClick={() => setShowSettings(true)} className="grid h-9 w-9 cursor-pointer place-items-center rounded-xl hover:bg-white/10" aria-label="Cài đặt">
@@ -298,6 +312,16 @@ export default function App() {
         </nav>
       </div>
       {showSettings && <SettingsModal onClose={() => setShowSettings(false)} />}
+      {showQr && (
+        <PayQRModal
+          note="Dong quy bong da"
+          subtitle="Tài khoản nhận tiền quỹ đội — số tiền tự nhập"
+          onClose={() => {
+            setShowQr(false)
+            if (location.hash === '#qr') history.replaceState(null, '', location.pathname + location.search)
+          }}
+        />
+      )}
       {viewMember && ctx.memberById.get(viewMember) && (
         <MemberModal key={viewMember} member={ctx.memberById.get(viewMember)!} zIndex="z-60" onClose={() => setViewMember(null)} />
       )}

@@ -114,7 +114,7 @@ describe('MCP: gạch nợ, quỹ tháng, thu chi', () => {
 
   it('trừ ứng không đủ tiền → từ chối; quỹ tháng không trừ ứng được', () => {
     let d = call(base(), 'mo_quy_thang', { thang: '10/2026' }).data
-    expect(() => tools.gach_no.run({ ten: 'dung', hinh_thuc: 'tru_ung' }, d)).toThrow(/chỉ trừ được tiền phạt/)
+    expect(() => tools.gach_no.run({ ten: 'dung', hinh_thuc: 'tru_ung' }, d)).toThrow(/chỉ trừ được tiền nước/)
     d = call(d, 'sua_thanh_vien', { ten: 'dung', tien_ung: 0 }).data
     d = call(d, 'tao_tran', { ngay: '1/10/2026', doi_a: ['tuan'], doi_b: ['dung'] }).data
     d = call(d, 'ghi_ket_qua', { ti_so_a: 1, ti_so_b: 0 }).data
@@ -137,7 +137,7 @@ describe('MCP: gạch nợ, quỹ tháng, thu chi', () => {
 
   it('xoá hẳn người còn nợ phải có xác nhận; tạm nghỉ thì không cần', () => {
     const d = call(base(), 'mo_quy_thang', { thang: '10/2026' }).data
-    expect(() => tools.xoa_thanh_vien.run({ ten: 'hung', xoa_han: true }, d)).toThrow(/CHƯA XOÁ.*còn nợ 100.000đ/)
+    expect(() => tools.xoa_thanh_vien.run({ ten: 'hung', xoa_han: true }, d)).toThrow(/CHƯA XOÁ.*còn chưa đóng 100.000đ/)
     expect(call(d, 'xoa_thanh_vien', { ten: 'hung' }).data.members.find((m) => m.id === 'h')?.active).toBe(false)
     expect(call(d, 'xoa_thanh_vien', { ten: 'hung', xoa_han: true, xac_nhan_bo_no: true }).data.members.some((m) => m.id === 'h')).toBe(false)
   })

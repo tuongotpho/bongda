@@ -199,11 +199,11 @@ export async function generateLineupCanvas(params: LineupImageParams): Promise<H
     // 2.2 Banner thông báo Đội thua nộp phạt & Tiến độ thu tiền
     let outcomeText = ''
     if (outcome === 'A') {
-      outcomeText = `🏆 Đội A thắng  ·  💧 Đội B nộp phạt: ${money(waterFee)}/người`
+      outcomeText = `🏆 Đội A thắng  ·  💧 Đội B đóng tiền nước: ${money(waterFee)}/người`
     } else if (outcome === 'B') {
-      outcomeText = `🏆 Đội B thắng  ·  💧 Đội A nộp phạt: ${money(waterFee)}/người`
+      outcomeText = `🏆 Đội B thắng  ·  💧 Đội A đóng tiền nước: ${money(waterFee)}/người`
     } else if (outcome === 'draw') {
-      outcomeText = `🤝 Hòa trận  ·  💧 Nộp phạt: ${money(waterFee)}/người`
+      outcomeText = `🤝 Hòa trận  ·  💧 Tiền nước: ${money(waterFee)}/người`
     } else {
       outcomeText = `💧 Tiền nước: ${money(waterFee)}/người`
     }
@@ -321,7 +321,7 @@ export async function generateLineupCanvas(params: LineupImageParams): Promise<H
     ctx.fillStyle = '#ffffff'
     ctx.font = 'bold 18px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     if (isPostMatch && teamChargedCount > 0) {
-      ctx.fillText(`${teamPaidCount}/${teamChargedCount} đã nộp phạt`, colX + colW - 28, colY + 58)
+      ctx.fillText(`${teamPaidCount}/${teamChargedCount} đã đóng`, colX + colW - 28, colY + 58)
     } else {
       ctx.fillText(`${playerIds.length} người · ${totalSkill}★`, colX + colW - 28, colY + 58)
     }
@@ -474,7 +474,7 @@ export async function generateLineupCanvas(params: LineupImageParams): Promise<H
   ctx.fillStyle = 'rgba(255, 255, 255, 0.65)'
   ctx.font = 'italic 19px -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
   const footerMessage = isPostMatch
-    ? '⚽ Anh em đội thua vui lòng nộp phạt đầy đủ vào quỹ để thủ quỹ thanh toán tiền nước!'
+    ? '⚽ Anh em đội thua vui lòng đóng tiền nước đầy đủ vào quỹ nhé!'
     : '⚽ Chúc hai đội thi đấu cống hiến, fair-play và nhiều bàn thắng!'
   ctx.fillText(footerMessage, cardW / 2, cardH - 55)
 

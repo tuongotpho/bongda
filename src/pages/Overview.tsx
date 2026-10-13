@@ -3,6 +3,8 @@ import { setPaid } from '../actions'
 import { debtors, fmtDate, fundSummary, getMemberAdvanceInfo, getPenaltyWinner, isPenaltyDecided, matchOutcome, money, personalMessage, reminderMessage } from '../logic'
 import { Icon, type IconName } from '../icons'
 import { FUND_NAMES } from '../types'
+import { PayQRModal } from '../PayQR'
+import type { MemberDebt } from '../logic'
 import { Avatar, Btn, Card, Empty, MemberLink, Modal, copyText, inputCls, useApp } from '../ui'
 
 /** Số người nợ hiện sẵn — còn lại bấm "Xem thêm" */
@@ -16,6 +18,8 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
   const owed = list.reduce((s, d) => s + d.total, 0)
   const [showMsg, setShowMsg] = useState(false)
   const [showAll, setShowAll] = useState(false)
+  /** null = đóng · 'all' = QR chung · MemberDebt = QR điền sẵn số tiền của người đó */
+  const [qr, setQr] = useState<MemberDebt | 'all' | null>(null)
   const lastMatch = [...data.matches].sort((a, b) => b.date.localeCompare(a.date) || b.createdAt - a.createdAt)[0]
 
   const advanceStats = useMemo(() => {
@@ -90,11 +94,16 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
           title="Chưa đóng đủ"
           subtitle={list.length ? `${list.length} người · tổng ${money(owed)}` : undefined}
           right={
-            list.length > 0 && (
-              <Btn kind="soft" className="px-2.5 py-1.5 text-xs" onClick={() => setShowMsg(true)}>
-                <Icon name="send" className="h-3.5 w-3.5" /> Soạn tin nhắc nhóm
+            <div className="flex gap-1.5">
+              <Btn kind="soft" className="px-2.5 py-1.5 text-xs" onClick={() => setQr('all')}>
+                <Icon name="wallet" className="h-3.5 w-3.5" /> QR chuyển khoản
               </Btn>
-            )
+              {list.length > 0 && (
+                <Btn kind="soft" className="px-2.5 py-1.5 text-xs" onClick={() => setShowMsg(true)}>
+                  <Icon name="send" className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Soạn </span>tin nhắc nhóm
+                </Btn>
+              )}
+            </div>
           }
         >
           {!list.length ? (
@@ -131,6 +140,14 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
                         >
                           <Icon name="message" className="h-3.5 w-3.5" /> Nhắn riêng
                         </button>
+                        <button
+                          type="button"
+                          onClick={() => setQr(d)}
+                          className="inline-flex cursor-pointer items-center gap-1 rounded-lg px-1.5 py-0.5 text-xs font-medium text-green-700 hover:bg-green-50"
+                          title="Mã QR có sẵn số tiền để quét chuyển khoản"
+                        >
+                          <Icon name="wallet" className="h-3.5 w-3.5" /> QR đóng {money(d.total)}
+                        </button>
                       </div>
                     </div>
                   </li>
@@ -164,6 +181,15 @@ export default function Overview({ go }: { go: (tab: string) => void }) {
         )}
       </div>
 
+      {qr && (
+        <PayQRModal
+          onClose={() => setQr(null)}
+          {...(qr === 'all'
+            ? { note: 'Dong quy bong da' }
+            : { amount: qr.total, note: `${qr.member.name} dong quy`, subtitle: `${qr.member.name} — đóng ${money(qr.total)} (${qr.unpaid.map((o) => o.label).join(', ')})` })}
+        />
+      )}
+
       {showMsg && (
         <Modal title="Tin nhắc cả nhóm" onClose={() => setShowMsg(false)}>
           <MessageBox text={reminderMessage(data, list)} onCopy={copy} />
@@ -181,7 +207,7 @@ function LastMatch({ id }: { id: string }) {
     return (
       <div className="text-sm">
         <div className="text-slate-500">{fmtDate(m.date)}</div>
-        <div className="mt-1 text-slate-600">Nhập từ sổ cũ — {m.charges.length} người bị phạt</div>
+        <div className="mt-1 text-slate-600">Nhập từ sổ cũ — {m.charges.length} người đóng tiền nước</div>
       </div>
     )
   const side = (k: 'A' | 'B', score: number | null) => (
@@ -212,10 +238,10 @@ function LastMatch({ id }: { id: string }) {
         {o === 'pending'
           ? 'Chưa nhập tỉ số'
           : isPenaltyDecided(m)
-            ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} — Đội ${o} thắng luân lưu (Đội ${o === 'A' ? 'B' : 'A'} nộp tiền phạt)`
+            ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} — Đội ${o} thắng luân lưu (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền nước)`
             : o === 'draw'
               ? 'Hoà'
-              : `Đội ${o} thắng — đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt`}
+              : `Đội ${o} thắng — đội ${o === 'A' ? 'B' : 'A'} đóng tiền nước`}
       </div>
     </div>
   )

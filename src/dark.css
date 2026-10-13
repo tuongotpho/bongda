@@ -431,4 +431,5 @@ html.dark body .keep-colors {
   :where(html.dark) .hover\:bg-green-700:hover:not(:disabled) { background-color: var(--k-green-700); }
   :where(html.dark) .hover\:bg-green-800:hover:not(:disabled) { background-color: var(--k-green-800); }
   :where(html.dark) .hover\:bg-red-700:hover:not(:disabled) { background-color: var(--k-red-700); }
+  :where(html.dark) .hover\:bg-sky-600:hover:not(:disabled) { background-color: var(--k-sky-600); }
 }

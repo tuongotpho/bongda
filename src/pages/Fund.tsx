@@ -9,6 +9,8 @@ import { Btn, Card, Empty, Field, MemberLink, Modal, PaidBadge, inputCls, name, 
 import { PayToggle } from './Matches'
 import ImageShareModal from '../ImageShareModal'
 import { generatePaidMatrixImage, type MatrixCell } from '../reportImage'
+import { bankText, hasBank } from '../bank'
+import { vietQrPayload } from '../vietqr'
 
 export default function Fund() {
   const { data, canEdit } = useApp()
@@ -28,7 +30,7 @@ export default function Fund() {
             <div className={`text-3xl font-extrabold tracking-tight ${fund[f].balance < 0 ? 'text-red-600' : 'text-green-700'}`}>{money(fund[f].balance)}</div>
             <div className="mt-1 space-y-0.5 text-xs text-slate-600">
               <div>
-                {f === 'main' ? 'Đóng quỹ tháng' : 'Tiền phạt thua'}: {money(fund[f].dues)}
+                {f === 'main' ? 'Đóng quỹ tháng' : 'Tiền nước đội thua'}: {money(fund[f].dues)}
               </div>
               <div>Ủng hộ / thu khác: {money(fund[f].other)}</div>
               <div>Đã chi: −{money(fund[f].spent)}</div>
@@ -239,13 +241,14 @@ function PaidMatrix() {
         name: name(ctx, r.id),
         owe: r.owe,
         cells: r.cells.map((o, i): MatrixCell =>
-          o ? (o.paid ? 'paid' : slots[i] > thisYm ? 'future' : 'unpaid') : opened.has(slots[i]) ? 'exempt' : 'closed',
+          o ? (o.paid ? (slots[i] > thisYm ? 'prepaid' : 'paid') : slots[i] > thisYm ? 'future' : 'unpaid') : opened.has(slots[i]) ? 'exempt' : 'closed',
         ),
       })),
       collected: data.payments
         .filter((p) => p.kind === 'monthly' && p.refId.startsWith(`${year}-`) && shown.has(p.memberId))
         .reduce((sum, p) => sum + p.amount, 0),
-      bankInfo: data.settings.bankInfo,
+      bankInfo: bankText(data.settings),
+      bankQr: hasBank(data.settings) ? vietQrPayload(data.settings.bankBin, data.settings.bankAccount) : undefined,
     })
   }
 
@@ -273,7 +276,7 @@ function PaidMatrix() {
         <>
           <label className="flex cursor-pointer items-center gap-1.5 text-xs font-medium text-slate-600">
             <input type="checkbox" checked={onlyOwe} onChange={(e) => setOnlyOwe(e.target.checked)} className="h-3.5 w-3.5 accent-green-700" />
-            Chỉ người còn nợ
+            Chỉ người chưa đóng
           </label>
           <YearPicker years={years} year={year} onChange={setYear} />
           <Btn kind="soft" className="px-2.5" onClick={() => setExporting(true)} aria-label="Xuất ảnh bảng tổng hợp" title="Xuất ảnh">
@@ -291,7 +294,7 @@ function PaidMatrix() {
         />
       )}
       {!rows.length ? (
-        <Empty>{onlyOwe ? 'Không ai còn nợ quỹ năm này.' : 'Chưa có thành viên đóng quỹ.'}</Empty>
+        <Empty>{onlyOwe ? 'Không ai chưa đóng quỹ năm này.' : 'Chưa có thành viên đóng quỹ.'}</Empty>
       ) : (
         <div className="-mx-4 overflow-x-auto px-4 sm:-mx-5 sm:px-5">
           <table className="w-full min-w-[720px] border-separate border-spacing-0 text-sm">
@@ -305,7 +308,7 @@ function PaidMatrix() {
                     T{Number(s.slice(5))}
                   </th>
                 ))}
-                <th className="py-2 pl-3 text-right">Còn nợ</th>
+                <th className="py-2 pl-3 text-right">Chưa đóng</th>
               </tr>
             </thead>
             <tbody>
@@ -327,7 +330,9 @@ function PaidMatrix() {
                       )
                     const future = s > thisYm
                     const tone = o.paid
-                      ? 'bg-green-600 text-white hover:bg-green-700'
+                      ? future
+                        ? 'bg-sky-500 text-white hover:bg-sky-600'
+                        : 'bg-green-600 text-white hover:bg-green-700'
                       : future
                         ? 'bg-amber-50 text-amber-600 ring-1 ring-amber-200 ring-inset hover:bg-amber-100'
                         : 'bg-red-50 text-red-600 ring-1 ring-red-200 ring-inset hover:bg-red-100'
@@ -336,7 +341,7 @@ function PaidMatrix() {
                         <button
                           onClick={() => toggle(o)}
                           disabled={!canEdit}
-                          title={`${name(ctx, r.id)} · ${o.label} · ${money(o.amount)} · ${o.paid ? 'đã đóng' : future ? 'chưa tới tháng' : 'chưa đóng'}`}
+                          title={`${name(ctx, r.id)} · ${o.label} · ${money(o.amount)} · ${o.paid ? (future ? 'đóng trước' : 'đã đóng') : future ? 'chưa tới tháng' : 'chưa đóng'}`}
                           className={`mx-auto grid h-7 w-7 place-items-center rounded-lg text-xs font-bold transition disabled:cursor-default ${canEdit ? 'cursor-pointer' : ''} ${tone}`}
                         >
                           {o.paid ? '✓' : future ? '·' : '✕'}
@@ -369,8 +374,9 @@ function PaidMatrix() {
           </table>
           <div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500">
             <span><span className="mr-1 inline-block h-3 w-3 rounded bg-green-600 align-[-2px]" />Đã đóng</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-sky-500 align-[-2px]" />Đóng trước</span>
             <span><span className="mr-1 inline-block h-3 w-3 rounded bg-red-50 ring-1 ring-red-200 ring-inset align-[-2px]" />Chưa đóng</span>
-            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-amber-50 ring-1 ring-amber-200 ring-inset align-[-2px]" />Mở sớm, chưa tới tháng (không tính nợ)</span>
+            <span><span className="mr-1 inline-block h-3 w-3 rounded bg-amber-50 ring-1 ring-amber-200 ring-inset align-[-2px]" />Mở sớm, chưa tới tháng (chưa phải đóng)</span>
             <span>– Miễn / không phải đóng</span>
           </div>
         </div>
@@ -471,6 +477,7 @@ function MonthModal({ mo, onClose }: { mo: FundMonth; onClose: () => void }) {
                     Mức {money(o.amount)}
                     {p && p.amount !== o.amount && ` · nộp ${money(p.amount)}`}
                     {p?.note && ` · ${p.note}`}
+                    {o.upcoming && (o.paid ? ' · đóng trước' : ' · chưa tới tháng')}
                   </div>
                 </div>
                 <div className="flex items-center gap-1">

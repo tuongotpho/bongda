@@ -4,12 +4,12 @@ export const COLLS: Coll[] = ['members', 'matches', 'months', 'payments', 'expen
 
 export type DrawRule = 'none' | 'half' | 'full'
 
-/** main = Quỹ bóng đá (đóng tháng → trả sân) · extra = Quỹ ủng hộ & phạt (→ bóng, áo, hoa quả, nước) */
+/** main = Quỹ bóng đá (đóng tháng → trả sân) · extra = Quỹ ủng hộ & tiền nước (→ bóng, áo, hoa quả, nước) */
 export type FundId = 'main' | 'extra'
 
 export const FUND_NAMES: Record<FundId, string> = {
   main: 'Quỹ bóng đá',
-  extra: 'Quỹ ủng hộ & phạt',
+  extra: 'Quỹ ủng hộ & tiền nước',
 }
 
 export interface FeeChange {
@@ -116,7 +116,13 @@ export interface Settings {
   waterFee: number
   monthlyFee: number
   drawRule: DrawRule
+  /** Dòng chữ chuyển khoản tự ghi — để trống thì ghép từ ngân hàng + STK + chủ TK */
   bankInfo: string
+  /** Mã BIN ngân hàng (VietQR), VD MB = 970422 */
+  bankBin: string
+  bankAccount: string
+  /** Tên chủ tài khoản (không dấu, như trên app ngân hàng) */
+  bankHolder: string
 }
 
 export interface AppData {
@@ -135,6 +141,9 @@ export const DEFAULT_SETTINGS: Settings = {
   monthlyFee: 100000,
   drawRule: 'half',
   bankInfo: '',
+  bankBin: '970422',
+  bankAccount: '0414',
+  bankHolder: 'LE VIET THANH',
 }
 
 export interface Obligation {
@@ -147,4 +156,6 @@ export interface Obligation {
   /** để sắp xếp: ngày trận hoặc ngày đầu tháng */
   date: string
   paid: boolean
+  /** Quỹ tháng mở sớm, chưa tới tháng: chưa phải đóng (không tính vào chưa đóng); đã đóng thì là "đóng trước" */
+  upcoming: boolean
 }

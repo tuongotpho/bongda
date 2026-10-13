@@ -1,3 +1,4 @@
+import { bankText } from './bank'
 import type { AppData, Charge, FundId, FundMonth, Match, Member, Obligation, Payment } from './types'
 
 export const money = (n: number) => n.toLocaleString('vi-VN') + 'đ'
@@ -197,7 +198,8 @@ export function purgeMemberPlan(data: AppData, memberId: string) {
   return { months, matches, paidTotal }
 }
 
-export function buildObligations(data: AppData): Obligation[] {
+export function buildObligations(data: AppData, today = todayISO()): Obligation[] {
+  const thisYm = today.slice(0, 7)
   const paid = new Set(data.payments.map((p) => p.id))
   const out: Obligation[] = []
   for (const m of data.matches) {
@@ -208,10 +210,11 @@ export function buildObligations(data: AppData): Obligation[] {
         memberId: c.memberId,
         kind: 'water',
         refId: m.id,
-        label: `Phạt ${fmtDate(m.date)}`,
+        label: `Tiền nước ${fmtDate(m.date)}`,
         amount: c.amount,
         date: m.date,
         paid: paid.has(id),
+        upcoming: false,
       })
     }
   }
@@ -227,6 +230,7 @@ export function buildObligations(data: AppData): Obligation[] {
         amount,
         date: `${mo.id}-01`,
         paid: paid.has(id),
+        upcoming: mo.id > thisYm,
       })
     }
   }
@@ -366,11 +370,14 @@ export interface MemberDebt {
   total: number
 }
 
-/** Danh sách người còn nợ, nợ nhiều nhất lên đầu */
+/** Khoản đến hạn mà chưa đóng (tháng quỹ chưa tới thì chưa tính) */
+export const isDue = (o: Obligation) => !o.paid && !o.upcoming
+
+/** Danh sách người chưa đóng (chỉ tính khoản đã đến hạn), thiếu nhiều nhất lên đầu */
 export function debtors(data: AppData, obligations = buildObligations(data)): MemberDebt[] {
   const byMember = new Map<string, Obligation[]>()
   for (const o of obligations) {
-    if (o.paid) continue
+    if (!isDue(o)) continue
     const list = byMember.get(o.memberId) ?? []
     list.push(o)
     byMember.set(o.memberId, list)
@@ -408,7 +415,8 @@ export function fundSummary(data: AppData): Record<FundId, FundTotals> {
 // ---------- Tin nhắn nhắc nhở (dán vào Zalo) ----------
 
 export function reminderMessage(data: AppData, list: MemberDebt[], today = todayISO()): string {
-  const { teamName, bankInfo } = data.settings
+  const { teamName } = data.settings
+  const bankInfo = bankText(data.settings)
   if (!list.length) return `⚽ ${teamName}: Tất cả thành viên đã hoàn thành nghĩa vụ. Cảm ơn anh em! 👏`
   const lines = [
     `⚽ ${teamName.toUpperCase()} — NHẮC ĐÓNG TIỀN (${fmtDate(today)})`,
@@ -418,18 +426,19 @@ export function reminderMessage(data: AppData, list: MemberDebt[], today = today
     ),
     `Tổng còn thiếu: ${money(list.reduce((s, d) => s + d.total, 0))}`,
   ]
-  if (bankInfo.trim()) lines.push(`💳 Chuyển khoản: ${bankInfo.trim()}`)
+  if (bankInfo) lines.push(`💳 Chuyển khoản: ${bankInfo}`)
   lines.push('Đóng xong báo thủ quỹ để gạch tên nhé anh em! 🙏')
   return lines.join('\n')
 }
 
 export function personalMessage(data: AppData, d: MemberDebt): string {
-  const { teamName, bankInfo } = data.settings
+  const { teamName } = data.settings
+  const bankInfo = bankText(data.settings)
   const lines = [
     `Chào ${d.member.name}, ${teamName} nhắc bạn còn ${money(d.total)} chưa đóng:`,
     ...d.unpaid.map((o) => `• ${o.label}: ${money(o.amount)}`),
   ]
-  if (bankInfo.trim()) lines.push(`💳 ${bankInfo.trim()}`)
+  if (bankInfo) lines.push(`💳 ${bankInfo}`)
   lines.push('Cảm ơn bạn! ⚽')
   return lines.join('\n')
 }

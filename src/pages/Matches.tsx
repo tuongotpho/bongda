@@ -103,7 +103,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
                     </div>
 
                     {m.charges ? (
-                      <div className="text-sm text-slate-600">Nhập từ sổ cũ · {m.charges.length} người bị phạt</div>
+                      <div className="text-sm text-slate-600">Nhập từ sổ cũ · {m.charges.length} người đóng tiền nước</div>
                     ) : (
                       <div className="w-full space-y-2">
                         {team('A')}
@@ -120,7 +120,7 @@ export default function Matches({ go }: { go: (tab: string, id?: string) => void
 
                     <div className="mt-auto w-full border-t border-slate-100 pt-2.5 text-xs">
                       {!obs.length ? (
-                        <span className="text-slate-400">Không phát sinh tiền phạt</span>
+                        <span className="text-slate-400">Không phát sinh tiền nước</span>
                       ) : unpaid > 0 ? (
                         <span className="flex items-center justify-between gap-2">
                           <span className="font-medium text-slate-600">
@@ -305,7 +305,7 @@ function MatchModal({
     const summary =
       (scored ? `${a} – ${b}: ` : '') +
       (tied ? `Hoà${pWinner ? ` · Đội ${pWinner} thắng luân lưu` : ''}` : `Đội ${out} thắng`) +
-      (out === 'draw' ? '' : ` — đội ${out === 'A' ? 'B' : 'A'} nộp phạt`)
+      (out === 'draw' ? '' : ` — đội ${out === 'A' ? 'B' : 'A'} đóng tiền nước`)
     if (
       !(await confirmDialog({
         title: 'Chốt kết quả trận?',
@@ -372,7 +372,7 @@ function MatchModal({
   // Thu tất cả tiền phạt của trận này trong 1 cú click
   const markAllPaid = async (paid: boolean) => {
     if (!canEdit) {
-      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để gạch nợ.')
+      toast('Vui lòng đăng nhập tài khoản Thủ quỹ để đánh dấu đã đóng.')
       return
     }
     const targetObs = obs.filter((x) => x.paid !== paid)
@@ -381,7 +381,7 @@ function MatchModal({
       // "Thu đủ cả đội" = thu tiền mặt; ai muốn trừ tiền ứng thì bấm nút "Trừ tiền ứng" của người đó
       await setPaid(x, paid)
     }
-    toast(paid ? `Đã gạch nợ cho toàn bộ ${targetObs.length} thành viên!` : 'Đã hủy đánh dấu đã nộp.')
+    toast(paid ? `Đã đánh dấu đã đóng cho toàn bộ ${targetObs.length} thành viên!` : 'Đã hủy đánh dấu đã nộp.')
   }
 
   const copyWaterDebtMessage = async () => {
@@ -396,7 +396,7 @@ function MatchModal({
       ...unpaid.map((o) => `- ${name(ctx, o.memberId)}: ${money(o.amount)}`),
     ]
     const ok = await copyText(lines.join('\n'))
-    toast(ok ? 'Đã sao chép danh sách nợ để gửi Zalo!' : 'Không sao chép được')
+    toast(ok ? 'Đã sao chép danh sách chưa đóng để gửi Zalo!' : 'Không sao chép được')
   }
 
   const del = async () => {
@@ -405,7 +405,7 @@ function MatchModal({
       !(await confirmDialog({
         title: `Xoá trận ${fmtDate(m.date)}?`,
         message: paidCount
-          ? `${paidCount} khoản tiền phạt đã thu của trận này cũng sẽ bị xoá khỏi sổ quỹ.`
+          ? `${paidCount} khoản tiền nước đã thu của trận này cũng sẽ bị xoá khỏi sổ quỹ.`
           : 'Đội hình và kết quả trận sẽ bị xoá. Không hoàn tác được.',
         confirmText: 'Xoá trận',
         danger: true,
@@ -480,7 +480,7 @@ function MatchModal({
                 <option key={match.id} value={match.id}>
                   {fmtDate(match.date)} —{' '}
                   {match.charges
-                    ? `sổ cũ, ${match.charges.length} người bị phạt`
+                    ? `sổ cũ, ${match.charges.length} người đóng tiền nước`
                     : `${match.teamA.length + match.teamB.length} người `}
                   {match.charges ? '' : match.scoreA != null ? `(${match.scoreA} - ${match.scoreB})` : matchOutcome(match) === 'pending' ? '(chưa có kết quả)' : `(${outcomeLabel(match)})`}
                 </option>
@@ -617,7 +617,7 @@ function MatchModal({
               <div className="flex-1">
                 <div className="font-bold text-slate-800">Trận nhập từ sổ Google Sheet cũ</div>
                 <p className="mt-1 text-xs text-slate-600">
-                  Trận này hiện chỉ có danh sách {m.charges.length} người bị phạt tiền nước, chưa phân chia đội hình 2 đội.
+                  Trận này hiện chỉ có danh sách {m.charges.length} người đóng tiền nước, chưa phân chia đội hình 2 đội.
                 </p>
               </div>
             </div>
@@ -650,7 +650,7 @@ function MatchModal({
                   }`}
                 >
                   Đội A thắng
-                  <span className="block text-[10px] font-normal opacity-80">Đội B nộp phạt</span>
+                  <span className="block text-[10px] font-normal opacity-80">Đội B đóng tiền nước</span>
                 </button>
 
                 <button
@@ -676,7 +676,7 @@ function MatchModal({
                   }`}
                 >
                   Đội B thắng
-                  <span className="block text-[10px] font-normal opacity-80">Đội A nộp phạt</span>
+                  <span className="block text-[10px] font-normal opacity-80">Đội A đóng tiền nước</span>
                 </button>
               </div>
             ) : (
@@ -684,10 +684,10 @@ function MatchModal({
                 {o === 'pending'
                   ? 'Trận đấu chưa nhập kết quả'
                   : isPenaltyDecided(m)
-                    ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} · Đội ${o} thắng pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`
+                    ? `Hoà${m.scoreA != null ? ` ${m.scoreA}–${m.scoreB}` : ''} · Đội ${o} thắng pen (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền nước)`
                     : o === 'draw'
                       ? 'Kết quả: Hoà'
-                      : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền phạt)`}
+                      : `Đội ${o} thắng (Đội ${o === 'A' ? 'B' : 'A'} đóng tiền nước)`}
                 {locked && m.scoreA != null && !isPenaltyDecided(m) && <span className="ml-1 text-slate-500">({m.scoreA}–{m.scoreB})</span>}
               </div>
             )}
@@ -727,7 +727,7 @@ function MatchModal({
                       }`}
                     >
                       Đội A thắng pen
-                      <span className="block text-[10px] font-normal opacity-85">Đội B nộp phạt</span>
+                      <span className="block text-[10px] font-normal opacity-85">Đội B đóng tiền nước</span>
                     </button>
 
                     <button
@@ -753,7 +753,7 @@ function MatchModal({
                       }`}
                     >
                       Đội B thắng pen
-                      <span className="block text-[10px] font-normal opacity-85">Đội A nộp phạt</span>
+                      <span className="block text-[10px] font-normal opacity-85">Đội A đóng tiền nước</span>
                     </button>
                   </div>
 
@@ -846,7 +846,7 @@ function MatchModal({
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <div>
               <h4 className="font-bold text-slate-800">
-                Tiền phạt thua{' '}
+                Tiền nước đội thua{' '}
                 {!m.charges && (
                   <span className="text-xs font-normal text-slate-500">
                     ({money(m.waterFee)} / người đội thua)
@@ -896,16 +896,16 @@ function MatchModal({
 
           {o === 'pending' && !m.charges ? (
             <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center text-sm text-slate-500">
-              Bấm chọn đội thắng ở trên để hệ thống tự động lọc danh sách người đội thua cần nộp phạt.
+              Bấm chọn đội thắng ở trên để hệ thống tự động lọc danh sách người đội thua cần đóng tiền nước.
             </div>
           ) : !obs.length ? (
             <div className="rounded-2xl bg-slate-50 p-4 text-center text-sm text-slate-600">
-              Hoà — theo luật đã đặt thì không ai phải nộp phạt tiền nước.
+              Hoà — theo luật đã đặt thì không ai phải đóng tiền nước.
             </div>
           ) : (
             <div className="rounded-2xl border border-slate-200 bg-white p-2">
               <div className="mb-2 px-2 pt-1 text-xs text-slate-500 flex justify-between">
-                <span>{obs.length} người phải nộp phạt:</span>
+                <span>{obs.length} người phải đóng tiền nước:</span>
                 <span className={unpaidCount ? 'text-red-600 font-bold' : 'text-green-700 font-bold'}>
                   {unpaidCount ? `Còn ${unpaidCount} người chưa nộp` : 'Đã thu đủ'}
                 </span>
